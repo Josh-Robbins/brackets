@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brackets"
+version = "0.4.1"
+description = "React-ish, server-first SPA framework for Python with server components, file-based routing, .bxc SFCs, and HTML-over-the-wire."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Brackets Authors" }]
+keywords = ["fastapi", "jinja2", "htmx", "spa", "server components", "sse", "pywebview"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Framework :: FastAPI",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Internet :: WWW/HTTP",
+]
+
+dependencies = [
+  "fastapi>=0.119",
+  "jinja2>=3.1.6",
+  "pydantic>=2.6",
+  "sqlmodel>=0.0.27",
+  "sqlalchemy>=2.0.14",
+  "anyio>=4.0",
+  "httpx>=0.27",
+  "itsdangerous>=2.1",
+  "uvicorn>=0.38",
+]
+
+[project.optional-dependencies]
+web = ["orjson>=3.10"]
+speed = ["uvicorn[standard]>=0.38"]
+desktop = ["pywebview>=6.1"]
+pack = ["pyinstaller>=6.16"]
+cache = ["redis>=5.0"]
+psql = ["psycopg[binary]>=3.2"]
+
+[project.scripts]
+brx = "brackets.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+brackets = [
+  "static/vendor/*",
+  "static/*.js",
+  "templates/**/*.bx",
+  "**/*.bx",
+  "**/*.bxc",
+]

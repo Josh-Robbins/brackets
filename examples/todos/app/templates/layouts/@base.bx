@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <head>
+    <title>{ title or 'Brackets' }</title>
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script src="/static/brackets.js"></script>
+  </head>
+  <body>
+    <nav><Link to="/" prefetch>Home</Link> • <Link to="/todos" prefetch>Todos</Link></nav>
+    <main>{ children | default('') }</main>
+  </body>
+</html>

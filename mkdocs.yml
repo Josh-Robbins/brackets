@@ -1,0 +1,17 @@
+site_name: Brackets
+theme:
+  name: material
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Authoring: authoring.md
+  - Templates (.bx): templates.md
+  - Components (.bxc): components.md
+  - Routing: routing.md
+  - Data & CRUD: data.md
+  - Caching: caching.md
+  - Security: security.md
+  - Desktop: desktop.md
+  - CLI: cli.md
+  - Plugin API: plugins.md
+  - FAQ: faq.md
