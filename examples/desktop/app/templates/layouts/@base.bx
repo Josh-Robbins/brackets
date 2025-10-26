@@ -1,0 +1,11 @@
+<!doctype html>
+<html>
+  <head>
+    <title>{ title or 'Brackets Desktop' }</title>
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script src="/static/brackets.js"></script>
+  </head>
+  <body>
+    <main id="app">{children}</main>
+  </body>
+</html>
