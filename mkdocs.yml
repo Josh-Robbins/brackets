@@ -1,17 +1,24 @@
 site_name: Brackets
+site_description: React‑ish, server‑first SPA framework for Python
 theme:
   name: material
+  features:
+    - navigation.tabs
+    - navigation.instant
+    - content.code.copy
+plugins:
+  - search
+  - mkdocstrings
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
-  - Authoring: authoring.md
-  - Templates (.bx): templates.md
-  - Components (.bxc): components.md
-  - Routing: routing.md
-  - Data & CRUD: data.md
-  - Caching: caching.md
-  - Security: security.md
+  - Authoring:
+      - Components (.bxc): components.md
+      - Templates (.bx): templates.md
+      - Routing: routing.md
+      - Data & CRUD: data.md
+      - Caching: cache.md
+      - Security: security.md
   - Desktop: desktop.md
   - CLI: cli.md
-  - Plugin API: plugins.md
   - FAQ: faq.md

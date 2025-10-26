@@ -1,30 +1,24 @@
-from fastapi import APIRouter
+from __future__ import annotations
 from typing import Callable, Any
+from fastapi import FastAPI
 
-_registry: list[tuple[str,str,Callable[...,Any]]] = []
+_REGISTRY: list[tuple[str,str,Callable[...,Any]]] = []
 
-def _add(method: str, path: str, fn: Callable[...,Any]):
-    _registry.append((method.upper(), path, fn))
-    return fn
+def _reg(method: str, path: str, func: Callable[...,Any]):
+    _REGISTRY.append((method.upper(), path, func)); return func
 
 def get(path: str):
-    def deco(fn): return _add('GET', path, fn)
-    return deco
+    return lambda f: _reg('GET', path, f)
 
 def post(path: str):
-    def deco(fn): return _add('POST', path, fn)
-    return deco
+    return lambda f: _reg('POST', path, f)
 
 def put(path: str):
-    def deco(fn): return _add('PUT', path, fn)
-    return deco
+    return lambda f: _reg('PUT', path, f)
 
 def delete(path: str):
-    def deco(fn): return _add('DELETE', path, fn)
-    return deco
+    return lambda f: _reg('DELETE', path, f)
 
-def mount_decorators(app):
-    router = APIRouter()
-    for method, path, fn in _registry:
-        router.add_api_route(path, fn, methods=[method])
-    app.include_router(router)
+def mount_decorators(app: FastAPI):
+    for method, path, func in list(_REGISTRY):
+        app.add_api_route(path, func, methods=[method])

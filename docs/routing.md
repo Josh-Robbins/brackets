@@ -1,2 +1,9 @@
-## Routing
-File-based under templates/pages + decorators get/post/etc. Special files: @base, @layout, @head, @error.
+# Routing
+
+Use decorators or file‑based routes.
+
+```python
+from brackets import get, page
+@get('/')
+def home(): return page('pages/index.bx', title='Welcome', _app=app)
+```

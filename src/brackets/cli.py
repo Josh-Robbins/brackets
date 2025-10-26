@@ -1,84 +1,122 @@
-import argparse, importlib, os, sys, urllib.request, pathlib, shutil, textwrap
-from pathlib import Path
+import argparse, importlib, importlib.util, importlib.machinery, pathlib, sys, subprocess
 
 def _load(target: str):
-    mod, obj = target.split(':', 1)
+    """Load ASGI app from either import string (pkg.mod:obj) or file path (path.py:obj)."""
+    target = target.strip().strip('"').strip("'")
+    if target.lower().endswith(".py") or target.replace("\\","/").lower().endswith(".py:app"):
+        path_s, obj = target.split(":", 1)
+        path = pathlib.Path(path_s).resolve()
+        sys.path.insert(0, str(path.parent))
+        name = path.stem
+        spec = importlib.util.spec_from_loader(
+            name, importlib.machinery.SourceFileLoader(name, str(path))
+        )
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Cannot load module from {path}")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[attr-defined]
+        return getattr(mod, obj)
+    mod, obj = target.split(":", 1)
     return getattr(importlib.import_module(mod), obj)
 
-def main():
-    p = argparse.ArgumentParser("brx")
-    sub = p.add_subparsers(dest="cmd", required=True)
+def _serve(target: str, mode: str = 'dev', host: str = '127.0.0.1', port: int = 8000):
+    import uvicorn
+    is_import = ':' in target and not target.replace("\\","/").lower().endswith('.py:app')
+    if mode == 'dev':
+        if is_import:
+            uvicorn.run(target, host=host, port=port, reload=True, factory=False)
+        else:
+            app = _load(target)
+            print("WARNING: Running without auto-reload because target is a file path.")
+            print("Tip: add __init__.py and use 'pkg.mod:app' for reload.")
+            uvicorn.run(app, host=host, port=port, reload=False)
+    else:
+        if is_import: uvicorn.run(target, host=host, port=port, workers=1)
+        else: uvicorn.run(_load(target), host=host, port=port)
 
-    dev = sub.add_parser("dev"); dev.add_argument("target")
-    srv = sub.add_parser("serve"); srv.add_argument("target")
-    desk = sub.add_parser("desktop"); desk.add_argument("target"); desk.add_argument("--title", default="Brackets App")
-    pack = sub.add_parser("pack"); pack.add_argument("entry"); pack.add_argument("--name", required=True)
-    cache = sub.add_parser("cache"); cache.add_argument("action", choices=["status","auto","use","clear"])
-    cache.add_argument("--url"); cache.add_argument("--tags"); cache.add_argument("--key")
-    assets = sub.add_parser("assets"); assets.add_argument("action", choices=["fetch"])
-    new = sub.add_parser("new"); new.add_argument("kind", choices=["component","page"]); new.add_argument("name"); new.add_argument("--split", action="store_true"); new.add_argument("--inline", action="store_true")
-    fmt = sub.add_parser("fmt"); fmt.add_argument("paths", nargs="*", default=["."])
-    conv = sub.add_parser("convert"); conv.add_argument("what", choices=["component"]); conv.add_argument("path"); conv.add_argument("--to", choices=["bxc","split","inline"], required=True)
+def _assets_fetch(version: str, dest: str):
+    """Fetch htmx and place it under package or project vendor dirs."""
+    try:
+        import httpx  # type: ignore
+    except Exception:
+        print("httpx not installed. Try: pip install httpx"); return 1
+    url = f"https://unpkg.com/htmx.org@{version}/dist/htmx.min.js"
+    r = httpx.get(url, timeout=20)
+    r.raise_for_status()
+    data = r.content
+    if dest == 'package':
+        from importlib.resources import files as pkg_files
+        target = pkg_files('brackets').joinpath('static/vendor/htmx.min.js')
+        p = pathlib.Path(str(target))
+    else:
+        p = pathlib.Path.cwd() / "public" / "vendor" / "htmx.min.js"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    print(f"Downloaded htmx {version} → {p}")
+    return 0
+
+def _assets_vendor():
+    """Copy the package's vendored htmx to ./public/vendor for apps."""
+    from importlib.resources import files as pkg_files
+    src = pathlib.Path(str(pkg_files('brackets').joinpath('static/vendor/htmx.min.js')))
+    if not src.exists():
+        print("No package vendor found. Run: brx assets fetch --dest package"); return 1
+    dst = pathlib.Path.cwd() / "public" / "vendor" / "htmx.min.js"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(src.read_bytes())
+    print(f"Copied {src} → {dst}")
+    return 0
+
+def _docs_serve():
+    try:
+        subprocess.run(["mkdocs","serve"], check=True)
+    except FileNotFoundError:
+        print("mkdocs not found. Install: pip install mkdocs mkdocs-material mkdocstrings")
+        return 1
+    return 0
+
+def _docs_build():
+    try:
+        subprocess.run(["mkdocs","build"], check=True)
+    except FileNotFoundError:
+        print("mkdocs not found. Install: pip install mkdocs mkdocs-material mkdocstrings")
+        return 1
+    return 0
+
+def main():
+    p = argparse.ArgumentParser('brx')
+    sub = p.add_subparsers(dest='cmd', required=True)
+
+    dev = sub.add_parser('dev'); dev.add_argument('target'); dev.add_argument('--host', default='127.0.0.1'); dev.add_argument('--port', type=int, default=8000)
+    srv = sub.add_parser('serve'); srv.add_argument('target'); srv.add_argument('--host', default='0.0.0.0'); srv.add_argument('--port', type=int, default=8000)
+
+    assets = sub.add_parser('assets', help='Assets operations')
+    assets_sub = assets.add_subparsers(dest='op', required=True)
+    a_fetch = assets_sub.add_parser('fetch'); a_fetch.add_argument('--version', default='1.9.12'); a_fetch.add_argument('--dest', choices=['package','project'], default='project')
+    assets_sub.add_parser('vendor')
+
+    docs = sub.add_parser('docs', help='Docs site')
+    docs_sub = docs.add_subparsers(dest='op', required=True)
+    docs_sub.add_parser('serve')
+    docs_sub.add_parser('build')
+
+    desk = sub.add_parser('desktop'); desk.add_argument('target'); desk.add_argument('--title', default='Brackets App'); desk.add_argument('--width', type=int, default=1200); desk.add_argument('--height', type=int, default=800)
 
     a = p.parse_args()
-    if a.cmd in ("dev","serve"):
-        import uvicorn
+    if a.cmd == 'dev':
+        _serve(a.target, mode='dev', host=a.host, port=a.port)
+    elif a.cmd == 'serve':
+        _serve(a.target, mode='prod', host=a.host, port=a.port)
+    elif a.cmd == 'assets':
+        if a.op == 'fetch': sys.exit(_assets_fetch(a.version, a.dest))
+        elif a.op == 'vendor': sys.exit(_assets_vendor())
+    elif a.cmd == 'docs':
+        if a.op == 'serve': sys.exit(_docs_serve())
+        elif a.op == 'build': sys.exit(_docs_build())
+    elif a.cmd == 'desktop':
         app = _load(a.target)
-        uvicorn.run(app, reload=(a.cmd=="dev"))
-    elif a.cmd=="desktop":
-        from .internal.desktop import openWindow
-        app = _load(a.target)
-        openWindow(app, title=a.title)
-    elif a.cmd=="pack":
-        print("TODO: PyInstaller wrapper coming soon")
-    elif a.cmd=="cache":
-        from .internal.cache import useCache, invalidate
-        if a.action=="status":
-            print("Cache status: TODO (backend + stats)")
-        elif a.action=="auto":
-            useCache("auto"); print("cache set to auto (prefers Redis, falls back to memory)")
-        elif a.action=="use":
-            useCache(a.url or "auto"); print("cache backend set")
-        elif a.action=="clear":
-            invalidate(key=a.key, tags=(a.tags.split(",") if a.tags else None)); print("cache cleared")
-    elif a.cmd=="assets":
-        # download htmx
-        vendor = Path(__file__).resolve().parent / "static" / "vendor"
-        vendor.mkdir(parents=True, exist_ok=True)
-        url = "https://unpkg.com/htmx.org@2.0.3/dist/htmx.min.js"
-        dest = vendor / "htmx.min.js"
-        print("Downloading", url, "->", dest)
-        urllib.request.urlretrieve(url, dest); print("Done.")
-    elif a.cmd=="new":
-        base = Path("components" if a.kind=="component" else "templates/pages")
-        base.mkdir(parents=True, exist_ok=True)
-        if a.kind=="component":
-            name = a.name if a.name.endswith(".bxc") else a.name + ".bxc"
-            (base / name).write_text(textwrap.dedent("""            <script lang="python">
-            from brackets import Component
-            class {ClassName}(Component):
-                async def mount(self, props, state):
-                    n, _ = self.useState('n', 0); return { 'n': n }
-                async def increment(self): n, setN = self.useState('n', 0); setN(n+1)
-            </script>
-            <template>
-              <section><button onClick={increment}>+1</button><strong>{n}</strong></section>
-            </template>
-            """).replace("{ClassName}", Path(name).stem))
-            print("Created", base / name)
-        else:
-            name = a.name if a.name.endswith(".bx") else a.name + ".bx"
-            (base / name).write_text("<h1>{title}</h1>")
-            print("Created", base / name)
-    elif a.cmd=="fmt":
-        # simple loop migration: [each x in y] -> [for y as x]
-        pats = [(re.compile(r'\[each\s+([A-Za-z_]\w*)\s+in\s+([^\]]+)\]'), r'[for \2 as \1]')]
-        for root in a.paths:
-            for p in Path(root).rglob("*.*"):
-                if p.suffix in (".bx",".bxc"):
-                    s = p.read_text(encoding="utf-8")
-                    import re
-                    s2 = re.sub(r'\[each\s+([A-Za-z_]\w*)\s+in\s+([^\]]+)\]', r'[for \2 as \1]', s)
-                    if s2 != s: p.write_text(s2, encoding="utf-8"); print("formatted", p)
-    elif a.cmd=="convert":
-        print("Converter not implemented yet.")
+        from .internal.app import openWindow
+        openWindow(app, title=a.title, width=a.width, height=a.height)
+
+if __name__ == '__main__':
+    sys.exit(main())

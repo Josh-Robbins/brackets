@@ -1,0 +1,6 @@
+include LICENSE
+include README.md
+recursive-include src/brackets/static *.js
+recursive-include src/brackets *.bx
+recursive-include src/brackets *.bxc
+include src/brackets/py.typed

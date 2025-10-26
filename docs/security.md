@@ -1,2 +1,5 @@
-## Security
-CSRF cookie + hidden field, HttpOnly cookies, SameSite=Lax, Secure in prod, CSP defaults.
+# Security
+
+- CSRF cookie + header/form token
+- Cookies: HttpOnly, SameSite=Lax
+- Rate limits: planned `@limit('100/m')`

@@ -1,9 +1,9 @@
+from pathlib import Path
 from datetime import datetime
-from brackets import App, get, page, useDatabase, crud, Model, Data, Id, CreatedAt, UpdatedAt
-from fastapi.responses import HTMLResponse
+from brackets import App, get, page, Model, Data, Id, CreatedAt, UpdatedAt, crud, useDatabase
 
-app = App(templates='examples/todos/app/templates')
-useDatabase('sqlite:///examples/todos/app/app.db')
+app = App(templates=str(Path(__file__).parent / 'templates'))
+useDatabase('sqlite:///app.db')
 
 class Todo(Model, table=True):
     id: int | None = Id()
@@ -15,9 +15,8 @@ class Todo(Model, table=True):
 class TodoCreate(Data): title: str
 class TodoUpdate(Data): title: str | None = None; done: bool | None = None
 
-crud('/todos', model=Todo, Create=TodoCreate, Update=TodoUpdate)
+crud('/todos', model=Todo)
 
 @get('/')
 def home():
-    html = app.render('pages/index.bx', title='Welcome')
-    return HTMLResponse(html)
+    return page('pages/index.bx', title='Todos', _app=app)
