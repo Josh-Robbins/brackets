@@ -1,5 +1,5 @@
 site_name: Brackets
-site_description: React‑ish, server‑first SPA framework for Python
+site_description: React-ish, server-first SPA framework for Python
 theme:
   name: material
   features:
@@ -11,9 +11,10 @@ plugins:
   - mkdocstrings
 nav:
   - Home: index.md
+  - Simple Mode: simple-mode.md
   - Quickstart: quickstart.md
   - Authoring:
-      - Components (.bxc): components.md
+      - Components (.bxc): bxc-authoring.md
       - Templates (.bx): templates.md
       - Routing: routing.md
       - Data & CRUD: data.md
@@ -21,4 +22,6 @@ nav:
       - Security: security.md
   - Desktop: desktop.md
   - CLI: cli.md
+  - Examples:
+      - Counter: examples-counter.md
   - FAQ: faq.md

@@ -1,8 +1,9 @@
-# Brackets v0.4.1 Patch
+# Brackets v0.4.1 — Examples & Docs Patch
 
-This patch adds:
-- Enhanced CLI (new component/page, docs new, cache status, assets fetch/vendor)
-- Docs GitHub Action (publish with MkDocs on push to main)
-- Desktop example (`examples/desktop`)
+Adds:
+- `examples/basic-counter/` (session-backed counter, SPA-style form submit)
+- Docs pages: `docs/simple-mode.md`, `docs/bxc-authoring.md`, `docs/examples-counter.md`
+- A complete `mkdocs.yml` with the new pages wired into the nav
 
-**Apply:** copy these files into your repo at the same paths.
+Apply these files into your repo root. If you already customized `mkdocs.yml`,
+merge the `nav:` entries from this patch into your existing file instead of overwriting.
