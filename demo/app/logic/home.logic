@@ -1,0 +1,29 @@
+({
+  async mount({ api, data, state }) {
+    const [localContacts, remoteSummary] = await Promise.all([
+      data.contacts.list(),
+      api.remote.summary()
+    ])
+
+    state.set({
+      localContacts,
+      localCount: localContacts.length,
+      remoteCount: remoteSummary.remoteCount,
+      remoteMessage: remoteSummary.remoteMessage,
+      statusLabel: 'Server abstraction active',
+      statusBody: 'Remote data loaded through the framework API layer.',
+      liveCount: 0,
+      liveStatus: 'idle'
+    })
+  },
+
+  async loadRemote({ api, state }) {
+    const remoteSummary = await api.remote.summary()
+    state.set({
+      remoteCount: remoteSummary.remoteCount,
+      remoteMessage: remoteSummary.remoteMessage,
+      statusLabel: 'Remote refresh complete',
+      statusBody: 'The same page logic can call a remote backend without hardcoding fetch details.'
+    })
+  }
+})

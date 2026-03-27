@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TITLE}}</title>
+    <meta name="theme-color" content="{{THEME_COLOR}}" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="{{FAVICON_PATH}}" type="image/svg+xml" />
+    <meta name="brackets-csrf" content="{{CSRF_TOKEN}}" />
+    <script type="application/json" id="brackets-session">{{SESSION_JSON}}</script>
+    <script type="application/json" id="brackets-host">{{HOST_JSON}}</script>
+    <script type="application/json" id="brackets-config">{{CONFIG_JSON}}</script>
+    <script type="importmap">{{IMPORT_MAP_JSON}}</script>
+    <script type="module" src="/framework/runtime.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: {{CANVAS}};
+        --panel: {{PANEL}};
+        --ink: {{INK}};
+        --accent: {{ACCENT}};
+        --muted: {{MUTED}};
+        --line: color-mix(in srgb, var(--accent) 18%, #d9cebc);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        position: relative;
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 14%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 28%),
+          radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 26%),
+          linear-gradient(180deg, #fbf6ef 0%, var(--bg) 100%);
+        overflow-x: hidden;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        inset: auto;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(10px);
+      }
+
+      body::before {
+        top: 4rem;
+        right: -5rem;
+        width: 22rem;
+        height: 22rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, color-mix(in srgb, var(--accent) 20%, white) 0%, transparent 70%);
+        opacity: 0.7;
+      }
+
+      body::after {
+        bottom: 5rem;
+        left: -6rem;
+        width: 28rem;
+        height: 18rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, color-mix(in srgb, var(--accent) 10%, white) 0%, transparent 72%);
+        opacity: 0.65;
+      }
+
+      .brx-splash {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 420px);
+        gap: 2rem;
+        padding: 2rem;
+      }
+
+      .brx-hero,
+      .brx-side {
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--panel) 92%, white);
+        border-radius: 28px;
+        box-shadow: 0 20px 70px rgba(19, 16, 12, 0.08);
+      }
+
+      .brx-hero {
+        padding: 2rem;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .brx-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(135deg, rgba(255,255,255,0.2), transparent 38%),
+          radial-gradient(circle at 78% 26%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 30%);
+        pointer-events: none;
+      }
+
+      .brx-hero::before {
+        content: "";
+        position: absolute;
+        inset: 1rem;
+        border-radius: 24px;
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+        pointer-events: none;
+      }
+
+      .brx-topline {
+        display: inline-flex;
+        gap: 0.55rem;
+        align-items: center;
+        padding: 0.45rem 0.8rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 12%, white);
+        color: var(--accent);
+        font-size: 0.82rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      .brx-wordmark {
+        width: min(100%, 720px);
+        margin: 1.4rem 0 1rem;
+      }
+
+      .brx-copy {
+        max-width: 58rem;
+      }
+
+      .brx-copy h1 {
+        margin: 0 0 0.85rem;
+        font-size: clamp(2.6rem, 5vw, 4.8rem);
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+      }
+
+      .brx-copy p {
+        margin: 0;
+        max-width: 42rem;
+        color: var(--muted);
+        font-size: 1.1rem;
+        line-height: 1.65;
+      }
+
+      .brx-chip-row,
+      .brx-action-row,
+      .brx-status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .brx-chip,
+      .brx-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.65rem 0.9rem;
+        border-radius: 999px;
+        background: white;
+        border: 1px solid var(--line);
+        color: var(--ink);
+      }
+
+      .brx-status strong {
+        color: var(--accent);
+      }
+
+      .brx-facts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.85rem;
+        margin-top: 1.1rem;
+      }
+
+      .brx-fact {
+        padding: 0.95rem 1rem;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(10px);
+      }
+
+      .brx-fact strong {
+        display: block;
+        margin-bottom: 0.3rem;
+        font-size: 0.98rem;
+      }
+
+      .brx-fact p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .brx-grid {
+        margin-top: 1.6rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .brx-card {
+        position: relative;
+        padding: 1rem;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+      }
+
+      .brx-card h2,
+      .brx-card h3 {
+        margin: 0;
+      }
+
+      .brx-card p,
+      .brx-card li {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .brx-card ul {
+        margin: 0.9rem 0 0;
+        padding-left: 1.1rem;
+      }
+
+      .brx-scene {
+        position: relative;
+        margin-top: 1.3rem;
+        min-height: 15rem;
+        border-radius: 28px;
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, #e7d9c8);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.92)),
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%);
+        overflow: hidden;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+      }
+
+      .brx-scene::before {
+        content: "";
+        position: absolute;
+        inset: 1rem;
+        border-radius: 22px;
+        border: 1px solid rgba(255,255,255,0.65);
+        pointer-events: none;
+      }
+
+      .brx-scene-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(108, 98, 87, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(108, 98, 87, 0.06) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: linear-gradient(180deg, rgba(0,0,0,0.6), transparent 90%);
+      }
+
+      .brx-scene-glow {
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(18px);
+        opacity: 0.55;
+      }
+
+      .brx-scene-glow--one {
+        width: 12rem;
+        height: 12rem;
+        right: 1rem;
+        top: -2rem;
+        background: color-mix(in srgb, var(--accent) 24%, white);
+      }
+
+      .brx-scene-glow--two {
+        width: 10rem;
+        height: 10rem;
+        left: -1rem;
+        bottom: -2rem;
+        background: color-mix(in srgb, var(--accent) 14%, white);
+      }
+
+      .brx-scene-stack {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(220px, 280px);
+        gap: 1rem;
+        padding: 1.25rem;
+        min-height: 100%;
+      }
+
+      .brx-scene-board,
+      .brx-scene-panel,
+      .brx-mini-card {
+        background: rgba(255,255,255,0.86);
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #e7d9c8);
+        box-shadow: 0 12px 28px rgba(31, 26, 23, 0.08);
+      }
+
+      .brx-scene-board {
+        position: relative;
+        border-radius: 24px;
+        padding: 1rem;
+        overflow: hidden;
+      }
+
+      .brx-scene-board::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent 22%);
+        pointer-events: none;
+      }
+
+      .brx-scene-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+      }
+
+      .brx-toolbar-dots {
+        display: flex;
+        gap: 0.35rem;
+      }
+
+      .brx-toolbar-dots span {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 46%, white);
+      }
+
+      .brx-toolbar-pill {
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 10%, white);
+        color: var(--accent);
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .brx-mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+      }
+
+      .brx-mini-card {
+        border-radius: 18px;
+        padding: 0.8rem;
+      }
+
+      .brx-mini-card strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+
+      .brx-mini-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .brx-mini-card--wide {
+        grid-column: 1 / -1;
+      }
+
+      .brx-scene-panel {
+        border-radius: 24px;
+        padding: 0.95rem;
+        display: grid;
+        gap: 0.75rem;
+        align-content: start;
+      }
+
+      .brx-scene-line {
+        height: 0.72rem;
+        border-radius: 999px;
+        background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 18%, white), rgba(255,255,255,0.86));
+      }
+
+      .brx-scene-line:nth-child(2) { width: 82%; }
+      .brx-scene-line:nth-child(3) { width: 68%; }
+      .brx-scene-line:nth-child(4) { width: 90%; }
+      .brx-scene-line:nth-child(5) { width: 58%; }
+
+      .brx-connectors {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .brx-action-row {
+        margin-top: 1.3rem;
+      }
+
+      .brx-button {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        min-width: 8.5rem;
+        padding: 0.85rem 1.2rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.75));
+        background:
+          linear-gradient(180deg, color-mix(in srgb, white 78%, var(--accent) 22%) 0%, color-mix(in srgb, var(--accent) 92%, #6d2417) 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.7),
+          0 16px 28px rgba(196, 81, 44, 0.24);
+        color: white;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        text-decoration: none;
+        transition:
+          transform 180ms ease,
+          box-shadow 180ms ease,
+          filter 180ms ease,
+          border-color 180ms ease;
+        overflow: hidden;
+      }
+
+      .brx-button::before {
+        content: "";
+        position: absolute;
+        inset: 1px;
+        border-radius: inherit;
+        background: linear-gradient(180deg, rgba(255,255,255,0.26), rgba(255,255,255,0.02));
+        z-index: -1;
+      }
+
+      .brx-button::after {
+        content: "";
+        position: absolute;
+        top: -120%;
+        left: -32%;
+        width: 34%;
+        height: 340%;
+        transform: rotate(18deg);
+        background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.55), rgba(255,255,255,0));
+        opacity: 0;
+        transition: transform 420ms ease, opacity 240ms ease;
+        pointer-events: none;
+      }
+
+      .brx-button:hover,
+      .brx-button:focus-visible {
+        transform: translateY(-2px) scale(1.01);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.78),
+          0 22px 34px rgba(196, 81, 44, 0.28);
+        filter: saturate(1.05);
+      }
+
+      .brx-button:hover::after,
+      .brx-button:focus-visible::after {
+        opacity: 1;
+        transform: translateX(320%) rotate(18deg);
+      }
+
+      .brx-button:active {
+        transform: translateY(0) scale(0.99);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.6),
+          0 10px 18px rgba(196, 81, 44, 0.2);
+      }
+
+      .brx-button:focus-visible {
+        outline: 2px solid color-mix(in srgb, white 56%, var(--accent) 44%);
+        outline-offset: 3px;
+      }
+
+      .brx-button--soft {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.96) 0%, color-mix(in srgb, white 82%, var(--panel) 18%) 100%);
+        color: var(--ink);
+        border-color: color-mix(in srgb, var(--accent) 20%, #e7d9c8);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.92),
+          0 14px 24px rgba(31, 26, 23, 0.08);
+      }
+
+      .brx-button--soft::before {
+        background: linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0.24));
+      }
+
+      .brx-button--soft:hover,
+      .brx-button--soft:focus-visible {
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.96),
+          0 18px 28px rgba(31, 26, 23, 0.11);
+      }
+
+      .brx-connector {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.9rem 1rem;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: white;
+      }
+
+      .brx-connector a {
+        min-width: 5.2rem;
+        padding: 0.72rem 1rem;
+        font-size: 0.96rem;
+      }
+
+      .brx-side {
+        padding: 1.2rem;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 1rem;
+      }
+
+      .brx-side-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .brx-rail {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .brx-rail-card {
+        padding: 1rem;
+        border-radius: 22px;
+        background: white;
+        border: 1px solid var(--line);
+      }
+
+      .brx-tech-list {
+        display: grid;
+        gap: 0.7rem;
+        margin-top: 0.9rem;
+      }
+
+      .brx-tech-item {
+        display: grid;
+        gap: 0.2rem;
+        padding: 0.85rem 0.9rem;
+        border-radius: 18px;
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #eadccc);
+        background: rgba(255,255,255,0.9);
+      }
+
+      .brx-tech-item strong {
+        font-size: 0.94rem;
+      }
+
+      .brx-tech-item span {
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      .brx-dot {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+
+      .brx-pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        color: var(--muted);
+      }
+
+      @keyframes brxFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-2px); }
+      }
+
+      @keyframes brxFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes brxDrift {
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(0, -6px, 0); }
+      }
+
+      @keyframes brxGlowPulse {
+        0%, 100% { opacity: 0.45; transform: scale(1); }
+        50% { opacity: 0.68; transform: scale(1.05); }
+      }
+
+      .brx-topline,
+      .brx-wordmark,
+      .brx-copy,
+      .brx-action-row,
+      .brx-chip-row,
+      .brx-status-row,
+      .brx-facts,
+      .brx-scene,
+      .brx-card,
+      .brx-side-header,
+      .brx-connector,
+      .brx-rail-card {
+        opacity: 0;
+        animation: brxFadeUp 720ms cubic-bezier(.2,.8,.2,1) forwards;
+      }
+
+      .brx-wordmark { animation-delay: 80ms; }
+      .brx-copy { animation-delay: 150ms; }
+      .brx-action-row { animation-delay: 220ms; }
+      .brx-chip-row { animation-delay: 280ms; }
+      .brx-status-row { animation-delay: 340ms; }
+      .brx-facts { animation-delay: 380ms; }
+      .brx-scene { animation-delay: 440ms; }
+      .brx-card:nth-of-type(1) { animation-delay: 520ms; }
+      .brx-card:nth-of-type(2) { animation-delay: 580ms; }
+      .brx-card:nth-of-type(3) { animation-delay: 640ms; }
+      .brx-side-header { animation-delay: 200ms; }
+      .brx-connector:nth-of-type(1) { animation-delay: 300ms; }
+      .brx-connector:nth-of-type(2) { animation-delay: 380ms; }
+      .brx-connector:nth-of-type(3) { animation-delay: 460ms; }
+      .brx-rail-card:nth-of-type(1) { animation-delay: 540ms; }
+      .brx-rail-card:nth-of-type(2) { animation-delay: 620ms; }
+
+      .brx-action-row .brx-button:first-child {
+        animation: brxFloat 4.6s ease-in-out infinite;
+      }
+
+      .brx-scene-glow {
+        animation: brxGlowPulse 5.4s ease-in-out infinite;
+      }
+
+      .brx-mini-card:nth-child(1) { animation: brxDrift 5.2s ease-in-out infinite; }
+      .brx-mini-card:nth-child(2) { animation: brxDrift 6.1s ease-in-out infinite 180ms; }
+      .brx-mini-card:nth-child(3) { animation: brxDrift 5.8s ease-in-out infinite 320ms; }
+
+      .brx-card--spotlight {
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, white), transparent 36%),
+          rgba(255, 255, 255, 0.94);
+      }
+
+      @media (max-width: 980px) {
+        .brx-splash {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-scene-stack {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-facts {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .brx-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="brackets-root">
+      <main class="brx-splash">
+        <section class="brx-hero">
+          <div class="brx-topline">
+            <span class="brx-dot"></span>
+            <span>{{NAME}} starter</span>
+          </div>
+          <img class="brx-wordmark" src="{{LOGO_PATH}}" alt="{{NAME}} logo" />
+          <div class="brx-copy">
+            <h1>{{BRANDING_TITLE}}</h1>
+            <p>{{TAGLINE}}</p>
+          </div>
+          <div class="brx-action-row">
+            <a class="brx-button" href="/framework/docs.md" target="_blank" rel="noreferrer">Start building</a>
+            <a class="brx-button brx-button--soft" href="/config/brackets.json" target="_blank" rel="noreferrer">View config</a>
+            <a class="brx-button brx-button--soft" href="/framework/agents.md" target="_blank" rel="noreferrer">Use with AI</a>
+          </div>
+          <div class="brx-chip-row" style="margin-top: 1.4rem;">
+            {{CHIPS_HTML}}
+          </div>
+          <div class="brx-status-row" style="margin-top: 1rem;">
+            <span class="brx-status"><strong>Framework</strong> framework/</span>
+            <span class="brx-status"><strong>Config</strong> {{CONFIG_LABEL}}</span>
+            <span class="brx-status"><strong>App</strong> app/</span>
+            <span class="brx-status"><strong>Origin</strong> {{ORIGIN}}</span>
+          </div>
+          <section class="brx-facts" aria-label="Brackets framework facts">
+            <article class="brx-fact">
+              <strong>Datastar engine</strong>
+              <p>Signals, DOM patching, actions, and SSE stay powered by Datastar.</p>
+            </article>
+            <article class="brx-fact">
+              <strong>No build step</strong>
+              <p>Templates stay in HTML and can run straight from a portable folder.</p>
+            </article>
+            <article class="brx-fact">
+              <strong>Backend agnostic</strong>
+              <p>Use flat files, SQLite, C#, Tauri, or any remote backend through the same app model.</p>
+            </article>
+            <article class="brx-fact">
+              <strong>Portable by default</strong>
+              <p>Build locally, then move the same app folder to a server or pair it with an installed backend.</p>
+            </article>
+          </section>
+          <section class="brx-scene" aria-label="Brackets starter workspace preview">
+            <div class="brx-scene-grid"></div>
+            <div class="brx-scene-glow brx-scene-glow--one"></div>
+            <div class="brx-scene-glow brx-scene-glow--two"></div>
+            <div class="brx-scene-stack">
+              <div class="brx-scene-board">
+                <div class="brx-scene-toolbar">
+                  <div class="brx-toolbar-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <span class="brx-toolbar-pill">superhuman flow</span>
+                </div>
+                <div class="brx-mini-grid">
+                  <article class="brx-mini-card">
+                    <strong>.html</strong>
+                    <p>Templates stay readable, fast, and live in the browser with Datastar behind them.</p>
+                  </article>
+                  <article class="brx-mini-card">
+                    <strong>.logic</strong>
+                    <p>Behavior stays close to the page so building feels direct, fast, and a little superhuman.</p>
+                  </article>
+                  <article class="brx-mini-card brx-mini-card--wide">
+                    <strong>.api and .data</strong>
+                    <p>Move between flat files, SQLite, and connected backends without changing the app model or slowing your flow.</p>
+                  </article>
+                </div>
+              </div>
+              <aside class="brx-scene-panel" aria-hidden="true">
+                <div class="brx-toolbar-pill">status</div>
+                <div class="brx-scene-line"></div>
+                <div class="brx-scene-line"></div>
+                <div class="brx-scene-line"></div>
+                <div class="brx-scene-line"></div>
+                <div class="brx-scene-line"></div>
+              </aside>
+            </div>
+          </section>
+          <div class="brx-grid">
+            <article class="brx-card">
+              <h2>Superhuman start</h2>
+              <ul>
+                {{HINTS_HTML}}
+              </ul>
+            </article>
+            <article class="brx-card brx-card--spotlight">
+              <h2>Superhuman reach</h2>
+              <p>Pair Brackets with local data, flat files, SQLite, C#, Tauri, or any backend through the same app model and keep your momentum.</p>
+            </article>
+            <article class="brx-card">
+              <h2>Superhuman stack</h2>
+              <div class="brx-tech-list">
+                <div class="brx-tech-item">
+                  <strong>Datastar</strong>
+                  <span>Reactive HTML engine, SSE patches, and backend-driven updates that keep the interface fast and alive.</span>
+                </div>
+                <div class="brx-tech-item">
+                  <strong>Brackets runtime</strong>
+                  <span>Syntax, routing, layouts, lifecycle, host contract, and a starter flow built for superhuman speed.</span>
+                </div>
+                <div class="brx-tech-item">
+                  <strong>Local data path</strong>
+                  <span>`.json`, `.yaml`, and `.db` through `.data` adapters so local-first work stays simple and powerful.</span>
+                </div>
+                <div class="brx-tech-item">
+                  <strong>Portable deploy</strong>
+                  <span>No build step, no Node requirement, and a path from desktop folder to production without rewriting the app.</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+        <aside class="brx-side">
+          <div class="brx-side-header">
+            <strong>Starter modules</strong>
+            <span class="brx-pulse"><span class="brx-dot"></span> live</span>
+          </div>
+          <div class="brx-connectors">
+            <div class="brx-connector">
+              <div>
+                <strong>Docs</strong>
+                <div style="color: var(--muted);">framework/docs.md</div>
+              </div>
+              <a class="brx-button" href="/framework/docs.md" target="_blank" rel="noreferrer">Open</a>
+            </div>
+            <div class="brx-connector">
+              <div>
+                <strong>Agents</strong>
+                <div style="color: var(--muted);">framework/agents.md</div>
+              </div>
+              <a class="brx-button brx-button--soft" href="/framework/agents.md" target="_blank" rel="noreferrer">Guide</a>
+            </div>
+            <div class="brx-connector">
+              <div>
+                <strong>Config</strong>
+                <div style="color: var(--muted);">{{CONFIG_LABEL}}</div>
+              </div>
+              <a class="brx-button brx-button--soft" href="/config/brackets.json" target="_blank" rel="noreferrer">View</a>
+            </div>
+          </div>
+          <div class="brx-rail">
+            <article class="brx-rail-card">
+              <h3 style="margin: 0 0 0.35rem;">Health</h3>
+              <p style="margin: 0;">Host, runtime, config, and starter assets are in place and ready to move at superhuman pace.</p>
+            </article>
+            <article class="brx-rail-card">
+              <h3 style="margin: 0 0 0.35rem;">Superhuman powers</h3>
+              <p style="margin: 0;">A file model, branded syntax, routing, layout preservation, lifecycle hooks, and a tiny same-origin host around Datastar.</p>
+            </article>
+            <article class="brx-rail-card">
+              <h3 style="margin: 0 0 0.35rem;">Core files</h3>
+              <p style="margin: 0;">`.view` defines pages, `.html` holds templates, `.logic` drives behavior, `.api` reaches backends, and `.data` handles local storage.</p>
+            </article>
+            <article class="brx-rail-card">
+              <h3 style="margin: 0 0 0.35rem;">Suggested first step</h3>
+              <p style="margin: 0;">Create your first page in <strong>app/</strong> and feel how quickly Brackets gets out of your way.</p>
+            </article>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "brackets-framework",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/cli.js demo/app",
+    "demo": "node src/cli.js demo/app --port 4173 --proxy /remote=http://127.0.0.1:4174",
+    "demo:remote": "node demo/remote/server.js",
+    "validate": "node src/cli.js validate demo/app",
+    "export": "node src/cli.js export demo/app --out-dir dist",
+    "test": "node --test tests/test.js"
+  }
+}

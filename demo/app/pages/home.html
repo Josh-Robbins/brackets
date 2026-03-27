@@ -1,0 +1,104 @@
+<template :fill="'hero'">
+  <section [hero-panel]>
+    <style>
+      .hero-panel {
+        padding: 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(143, 59, 46, 0.12), rgba(255, 250, 242, 0.98));
+        box-shadow: 0 20px 40px rgba(84, 55, 32, 0.08);
+      }
+
+      .hero-panel h2 {
+        margin: 0 0 0.35rem;
+      }
+    </style>
+    <h2>Desktop-first, backend-agnostic, Datastar-powered</h2>
+    <p>The local host, router, syntax transform, local persistence, and remote transport all run together in one small framework concept.</p>
+  </section>
+</template>
+
+<section [dashboard] :state="{ localContacts: [], localCount: 0, remoteCount: 0, remoteMessage: 'Loading...', statusLabel: 'Preparing...', statusBody: 'Booting the framework runtime.', liveCount: 0, liveStatus: 'idle' }">
+  <style>
+    .dashboard {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: 0 12px 30px rgba(80, 61, 42, 0.06);
+    }
+
+    .dashboard-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.8rem 1.1rem;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .button.secondary {
+      background: #d8cab8;
+      color: var(--ink);
+    }
+
+    .metric {
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0.25rem 0 0;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+
+  <div [dashboard-grid]>
+    <article [card]>
+      <p [muted]>Local flat-file records</p>
+      <p [metric] :text="localCount"></p>
+    </article>
+    <article [card]>
+      <p [muted]>Remote API count</p>
+      <p [metric] :text="remoteCount"></p>
+    </article>
+    <article [card]>
+      <p [muted]>Live SSE count</p>
+      <p [metric] :text="liveCount"></p>
+    </article>
+  </div>
+
+  <article [card]>
+    <h1>Framework proof app</h1>
+    <p :text="remoteMessage"></p>
+    <p [muted] :text="'Live channel: ' + liveStatus"></p>
+    <p [muted] :loading="remote">Refreshing remote summary...</p>
+    <p [muted] :error="remote">Remote summary request failed.</p>
+
+    <div [dashboard-actions]>
+      <button [button] @click="loadRemote">Refresh remote summary</button>
+      <button [button] [secondary] @click="read.sse('/remote/events/counts'); mutate({ liveStatus: 'streaming' })">Start live updates</button>
+      <a href="/contacts" [button] [secondary] style="text-decoration:none; display:inline-flex; align-items:center;">Open local contacts</a>
+    </div>
+  </article>
+
+  <div :use="'status-card.html'" :props="{ title: statusLabel, body: statusBody }"></div>
+</section>

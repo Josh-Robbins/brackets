@@ -1,0 +1,6 @@
+node_modules/
+dist/
+static-out/
+.DS_Store
+Thumbs.db
+demo/*.log

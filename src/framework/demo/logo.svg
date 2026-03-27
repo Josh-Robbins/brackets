@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="720" height="280" viewBox="0 0 720 280" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="brackets-logo-title brackets-logo-desc">
+  <title id="brackets-logo-title">{{TITLE}}</title>
+  <desc id="brackets-logo-desc">{{TAGLINE}}</desc>
+  <defs>
+    <linearGradient id="brackets-gradient" x1="60" y1="36" x2="300" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="{{ACCENT_SOFT}}"/>
+      <stop offset="1" stop-color="{{ACCENT}}"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="672" height="232" rx="40" fill="{{PANEL}}"/>
+  <rect x="48" y="48" width="220" height="184" rx="32" fill="url(#brackets-gradient)"/>
+  <path d="M134 94L96 140L134 186" stroke="{{INK}}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M182 94L220 140L182 186" stroke="{{INK}}" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="156" cy="140" r="18" fill="{{INK}}"/>
+  <path d="M322 102H586" stroke="{{ACCENT}}" stroke-width="6" stroke-linecap="round"/>
+  <path d="M322 140H646" stroke="{{INK}}" stroke-width="10" stroke-linecap="round"/>
+  <path d="M322 184H530" stroke="{{MUTED}}" stroke-width="6" stroke-linecap="round"/>
+  <text x="322" y="94" fill="{{MUTED}}" font-family="Segoe UI, system-ui, sans-serif" font-size="20" letter-spacing="0.24em">FRAMEWORK READY</text>
+  <text x="322" y="152" fill="{{INK}}" font-family="Georgia, 'Times New Roman', serif" font-size="62" font-weight="700">{{NAME}}</text>
+  <text x="322" y="202" fill="{{MUTED}}" font-family="Segoe UI, system-ui, sans-serif" font-size="22">{{TAGLINE}}</text>
+</svg>

@@ -1,0 +1,18 @@
+page({
+  id: 'contacts',
+  route: '/contacts',
+  title: 'Brackets Contacts',
+  meta: {
+    description: 'Contacts demo showing .data persistence and route-level page composition.'
+  },
+  seo: {
+    changefreq: 'weekly',
+    priority: 0.7
+  },
+  html: '@pages/contacts.html',
+  layout: '@layouts/app.html',
+  logic: '@logic/contacts.logic',
+  data: {
+    contacts: '@data/contacts.data'
+  }
+})

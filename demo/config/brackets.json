@@ -1,0 +1,30 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 4173
+  },
+  "branding": {
+    "name": "Brackets",
+    "title": "Brackets is ready",
+    "tagline": "Everything is working and ready to start building from.",
+    "accent": "#c4512c",
+    "accentSoft": "#f6b48f",
+    "canvas": "#f7efe3",
+    "panel": "#fffaf4",
+    "ink": "#1f1a17",
+    "muted": "#6c6257"
+  },
+  "splash": {
+    "enabled": true,
+    "chips": [
+      "No build step",
+      "Datastar engine",
+      "Backend agnostic"
+    ],
+    "hints": [
+      "Edit files in app/",
+      "Adjust settings in config/brackets.json or config/brackets.yaml",
+      "Use framework/docs.md and framework/agents.md when you need help"
+    ]
+  }
+}

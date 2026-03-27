@@ -1,0 +1,727 @@
+# Brackets Reference
+
+This document captures the current Brackets language surface from the design notes, then explains how each part should behave in general and how it should relate to Datastar.
+
+It is based on:
+
+- `Design ideas/Starting consept.md`
+- `Design ideas/framework design & review v1.md`
+- `Design ideas/framework design & review v2.md`
+- `Design ideas/framework design & review v3.md`
+- `Design ideas/framework design & review v4.md`
+- `Design ideas/framework design & review v5.md`
+- Datastar official docs:
+  - [Attributes](https://data-star.dev/reference/attributes)
+  - [Actions](https://data-star.dev/reference/actions)
+  - [Backend Requests](https://data-star.dev/guide/backend_requests)
+  - [SSE Events](https://data-star.dev/reference/sse_events)
+  - [Security](https://data-star.dev/reference/security)
+- OWASP guidance:
+  - [Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+  - [Input Validation Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)
+
+## Canonical Summary
+
+This is the compact reference shape the project should stay aligned with.
+
+### File types
+
+| File type | Meaning |
+|---|---|
+| `.view` | what page exists |
+| `.logic` | how the app behaves |
+| `.api` | how the app talks to a backend |
+| `.data` | how the app talks to local storage/data files |
+| `.html` | actual markup/templates/pages/layouts/components |
+| `.json` | simple structured storage |
+| `.yaml` | human-editable config/content storage |
+| `.db` | file-backed database storage |
+
+### Routing
+
+| Item | Meaning |
+|---|---|
+| `router.logic` | router engine |
+| `view.route` | optional route declaration in a `.view` file |
+| `/routes/*.logic` | grouped route registration for larger apps |
+
+### Page manifest
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | stable page identity |
+| `html` | yes | page HTML reference |
+| `logic` | no | primary behavior module or inline logic |
+| `route` | no | route pattern or path |
+| `title` | no | document/page title |
+| `meta` | no | document metadata such as description |
+| `seo` | no | SEO/export metadata such as canonical, image, sitemap, and feed hints |
+| `auth` | no | route auth requirements and redirect policy |
+| `assets` | no | route-level asset hints |
+| `layout` | no | layout HTML reference |
+| `api` | no | named remote dependencies |
+| `data` | no | named local-data dependencies |
+
+### Context
+
+| Group | Purpose |
+|---|---|
+| `route` | route params, query, path, and hash |
+| `state` | local state reads and writes |
+| `action` | current event, element, and input payload |
+| `api` | backend transport modules |
+| `data` | local persistence modules |
+| `nav` | navigation helpers |
+| `cache` | cache/prefetch/revalidation helpers |
+| `auth` | session and CSRF helpers |
+| `cleanup()` | lifecycle teardown registration |
+
+Common helper surface inside grouped context:
+
+- `ctx.action.input()` reads the current control or current form payload
+- `ctx.action.formData()` returns raw multipart-friendly `FormData` for upload flows
+- `ctx.action.files(name?)` returns selected files from the active input or form
+- `ctx.nav.prefetch(path)` warms the next route
+- `ctx.nav.download(path, filename?)` triggers a normal download without inventing a separate client API
+- `ctx.cache.fetch(...)`, `ctx.cache.refresh(...)`, and `ctx.cache.invalidate(...)` manage Brackets cache state
+- `ctx.auth.session()` and `ctx.auth.refresh()` expose session state
+
+### Lifecycle
+
+| Hook | Purpose |
+|---|---|
+| `mount()` | automatic setup when an instance becomes live |
+| `sync()` | automatic update when the same instance is preserved |
+| `run()` | explicit advanced task entry point |
+| named action | ordinary UI action |
+| returned cleanup / `ctx.cleanup()` | teardown for work started by `mount()` |
+
+### Syntax
+
+| Purpose | Syntax | Example |
+|---|---|---|
+| Class shorthand | `[name]` | `<div [card]>` |
+| ID shorthand | `#name` | `<main #content>` |
+| Event | `@event="..."` | `<button @click="save">` |
+| Local state | `:state="..."` | `<section :state="{ open: false }">` |
+| Calculated values | `:calc="..."` | `<div :calc="{ total: price * qty }">` |
+| Text binding | `:text="..."` | `<span :text="count">` |
+| HTML binding | `:html="..."` | `<div :html="content">` |
+| Show/hide | `:show="..."` | `<div :show="open">` |
+| Two-way bind | `:bind="..."` | `<input :bind="form.name">` |
+| Conditional | `:if="..."` | `<section :if="loggedIn">` |
+| Loop | `:each="..."` | `<template :each="item in items">` |
+| Load component/template | `:use="..."` | `<div :use="'card'">` |
+| Props | `:props="..."` | `<div :use="'card'" :props="{ title: 'Hi' }">` |
+| Layout area | `:area="..."` | `<header :area="'header'">` |
+| Fill area | `:fill="..."` | `<template :fill="'header'">` |
+| Mount target | `:mount` | `<main :mount>` |
+| Reactive class | `:class.name="..."` | `<div :class.open="open">` |
+| Reactive attribute | `:set.name="..."` | `<a :set.href="url">` |
+
+### Transport helpers
+
+| Helper | Meaning |
+|---|---|
+| `read()` | live SSE read |
+| `request()` | advanced one-off read-only request |
+| `get()` | one-off read |
+| `create()` | create record |
+| `update()` | full update |
+| `patch()` | partial update |
+| `delete()` | delete record |
+| `mutate()` | local state mutation |
+
+### `.api` helper surface
+
+`.api` modules stay backend agnostic by receiving a thin transport helper instead of a backend-framework-specific SDK.
+
+| Helper | Meaning |
+|---|---|
+| `http.request(method, url, payload?, options?)` | low-level HTTP request helper |
+| `http.get/post/put/patch/delete(...)` | common HTTP verbs |
+| `http.read(url, options?)` | SSE/read descriptor |
+| `http.client(baseUrl, defaults?)` | preconfigured backend client for one backend root |
+| `http.resource(baseUrl, defaults?)` | alias of `http.client(...)` |
+| `http.openapi(baseUrl, defaults?)` | explicit OpenAPI-oriented client alias |
+| `client.operation({...})` | OpenAPI-shaped operation request with path/query/header/cookie/body fields |
+
+Notes:
+
+- `http.client('/remote/api')` should be the low-boilerplate path for `.api` modules talking to one backend root
+- `http.openapi('/remote/api').operation({...})` is the explicit OpenAPI-aligned path when an app wants path params, query params, headers, cookies, and request bodies described in one place
+- helpers should preserve HTTP-first transport and Datastar-compatible response handling
+- `.api` should not assume Node, Express, Next.js, or any other specific backend stack
+- OpenAPI defaults now baked into the helper surface include:
+  - path params using simple serialization
+  - query params using form serialization with explode-by-default
+  - header params using simple serialization
+  - cookie params using form serialization
+  - `GET` and `HEAD` requests rejecting request bodies unless explicitly overridden
+
+### Storage guidance
+
+| Use case | Best fit |
+|---|---|
+| mock/demo data | `.json` |
+| editable config/content | `.yaml` |
+| durable local database | `.db` |
+| framework local-data adapter | `.data` |
+
+### Async/data UX
+
+| Contract | Meaning |
+|---|---|
+| route-level loading | route transitions can bind to `:loading="route"` |
+| route-level errors | route failures can bind to `:error="route"` |
+| optimistic state | `ctx.state.optimistic(patch, task)` |
+| cache fetch | `ctx.cache.fetch(key, loader, options)` |
+| cache refresh | `ctx.cache.refresh(key, loader, options)` |
+| cache invalidate | `ctx.cache.invalidate(key)` or `ctx.state.invalidate(key)` |
+
+### Website/export/runtime contracts
+
+| Contract | Meaning |
+|---|---|
+| `/sitemap.xml` | sitemap output from route manifests |
+| `/feed.xml` | feed output from route manifests |
+| `/robots.txt` | robots output with sitemap reference |
+| `/__brackets/host` | host capability contract |
+| `/.well-known/brackets-host.json` | public host capability contract |
+| `validate` | framework contract validation command |
+| `export` | static shell export command |
+
+### Final recommendations
+
+1. Keep `.view`, `.logic`, `.api`, `.data`, and `.html` as the public framework file model.
+2. Keep `.view` as the page-layer contract, not raw markup.
+3. Keep markup in `.html`.
+4. Keep routing in `.logic`, not `.api`.
+5. Keep `.api` strictly about remote/backend transport.
+6. Keep `.data` strictly about local persistence/storage access.
+7. Ship the tiny local server early because it unlocks the rest of the design cleanly.
+8. Use import maps for framework modules.
+9. Keep JS flat and normal.
+10. Keep Datastar as the engine, not the public authoring surface.
+11. Use `page()` for declarative page manifests.
+12. Use `print()` for render/output helpers.
+13. Support plain-object authoring and optional helper-based authoring.
+14. Remove `export default` as required ceremony from framework-identity files.
+15. Allow inline logic for simple pages and external `.logic` files for larger pages.
+16. Use `mount()` and `sync()` as lifecycle hooks.
+17. Keep `run()` as an imperative advanced task hook, not a second setup hook.
+18. Prefer direct named actions for ordinary UI behavior.
+19. Preserve layouts across same-layout route changes.
+20. Keep `ctx` as the canonical runtime object name.
+21. Solve `ctx.` fatigue with grouped destructuring, not hidden magic locals.
+22. Keep the v1 `ctx` shape small, grouped, and teachable.
+23. Keep v1 small, coherent, and teachable.
+
+## Reading This Reference
+
+Brackets is not a second reactive engine. Datastar is the engine. Brackets adds:
+
+- the authoring syntax
+- the file model
+- scoped vocabulary
+- layout and routing conventions
+- the tiny same-origin host
+- the backend-agnostic app contract
+
+Status labels in this doc mean:
+
+- `Locked`: repeated or explicitly affirmed in the later review docs.
+- `Review-doc present`: listed in the later review docs, but the semantics are still thin compared with the locked core.
+- `Historical`: appears in earlier exploratory note history, but is not the current preferred public syntax.
+
+## Core Principle
+
+The clean split is:
+
+- Brackets owns scope resolution, authoring ergonomics, manifests, layout composition, and app structure.
+- Datastar owns signals, reactive updates, DOM patching, backend requests, and SSE response handling.
+
+That means Brackets syntax should compile to Datastar-native behavior whenever Datastar already has the right primitive.
+
+Brackets is also backend agnostic by design:
+
+- `.api` is the contract for remote/backend transport
+- `.data` is the contract for local persistence and storage adapters
+- `.json`, `.yaml`, and `.db` are storage formats the local side can use without changing the frontend language
+
+## Syntax Families
+
+Brackets converged on a mixed syntax model:
+
+- `[]` for naming and structural shorthand
+- `#` for ids
+- `@` for behavior
+- `:` for reactive, templating, and framework directives
+
+### Structural shorthand
+
+| Syntax | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `[name]` | Class/style/structure shorthand. `<div [card]>` means "this element carries the `card` name". | Brackets sugar. Datastar does not define this syntax. | `Locked` |
+| `#name` | Id shorthand. `<main #content>` means `id="content"`. | Plain HTML sugar, not a Datastar feature. | `Locked` |
+
+## Event Syntax
+
+Brackets keeps event authoring short and HTML-native.
+
+| Syntax | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `@click` | Handle click behavior. | Compiles naturally to Datastar `data-on:click`. | `Locked` |
+| `@input` | Handle input behavior. | Compiles naturally to Datastar `data-on:input`. | `Locked` |
+| `@change` | Handle change behavior. | Compiles naturally to Datastar `data-on:change`. | `Locked` |
+| `@submit` | Handle form submission behavior. | Compiles naturally to Datastar `data-on:submit`. Datastar prevents native submit by default on that listener. | `Locked` |
+
+General rule:
+
+- Prefer direct named actions for ordinary UI behavior, for example `@click="refresh"` or `@submit="createPost"`.
+- Named actions may also take explicit arguments, for example `@click="select(contact.id)"`, as long as Brackets still routes them into `.logic` instead of turning them into a second framework runtime.
+- Keep `.logic.run()` for advanced or framework-invoked tasks, not for every normal button click.
+
+Datastar note:
+
+- Datastar already exposes event listeners through `data-on:*`.
+- Datastar also exposes `evt` inside event expressions.
+- Brackets should preserve that power while making the authoring syntax smaller.
+- plain transport calls inside event expressions should compile to Datastar-native actions when there is a clean one-to-one fit
+
+## Core Directives
+
+| Syntax | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `:state="..."` | Define local scoped state for the element, page, or component. | Maps cleanly to Datastar `data-signals`. Brackets adds scope resolution and plain-name authoring. | `Locked` |
+| `:calc="..."` | Define derived, read-only values computed from state. | Maps cleanly to Datastar `data-computed`. Datastar's docs explicitly treat computed values as read-only. | `Locked` |
+| `:run="..."` | Run an expression when the element/template becomes live. Useful for setup requests or startup behavior from markup. | Best fit is Datastar `data-init` when this is element-init behavior. It is distinct from `.logic run(payload, ctx)`. | `Locked` |
+| `:watch="..."` | Run side effects when referenced values change. | Maps cleanly to Datastar `data-effect`, which Datastar documents as the side-effect hook. | `Locked` |
+| `:text="..."` | Bind text content. | Maps directly to Datastar `data-text`. | `Locked` |
+| `:html="..."` | Bind HTML content instead of text. | There is no documented free-core `data-html` attribute in the Datastar attributes reference. Brackets must treat this as trusted-only HTML insertion or a carefully scoped plugin/patching mechanism. | `Locked` |
+| `:show="..."` | Show or hide an element based on an expression. | Maps directly to Datastar `data-show`. | `Locked` |
+| `:bind="..."` | Two-way bind user input to state. | Maps directly to Datastar `data-bind`. | `Locked` |
+| `:if="..."` | Conditional rendering. | Locked in the Brackets language, but not shown as a free-core Datastar attribute in the official attributes reference. Brackets likely needs a template transform that still lands on Datastar's signal and patch model. | `Locked` |
+| `:each="..."` | Loop/repetition over a collection. | Locked in the Brackets language, but not shown as a free-core Datastar attribute in the official attributes reference. Brackets likely needs a template transform that still lands on Datastar's signal and patch model. | `Locked` |
+
+### Notes on `:run`
+
+There are two different `run` ideas in the notes:
+
+- `:run="..."` in HTML means "do this when this markup becomes live".
+- `run(payload, ctx)` in `.logic` means "imperative task entry point".
+
+The review docs are clear that:
+
+- `mount()` is lifecycle
+- `sync()` is lifecycle for a preserved instance
+- `run()` is intent, not a second mount hook
+
+So these should not be collapsed into one concept.
+
+### Notes on `:html`
+
+This directive needs stricter security rules than `:text`.
+
+- Datastar's security guidance says user input should be escaped and unsafe input should not be trusted.
+- OWASP recommends safe sinks like `textContent` for text output and warns against injecting variables into dangerous HTML or script contexts.
+- Brackets should therefore document `:html` as trusted-only unless a sanitizer is explicitly configured.
+
+In practice:
+
+- use `:text` for ordinary user data
+- use `:html` only for trusted markup, sanitized content, or backend-produced HTML you intentionally treat as markup
+
+## Template And Layout Directives
+
+These directives are where Brackets most clearly adds framework structure above Datastar.
+
+| Syntax | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `:use="..."` | Load or compose another template/component/layout by name or path. | Framework-level composition. Datastar does not define `data-use`. Brackets should implement this as template wiring above Datastar. | `Locked` |
+| `:props="..."` | Pass inputs into the thing being used. | Framework-level component/layout input contract. Datastar can carry the resulting values as signals, but `:props` itself is Brackets vocabulary. | `Locked` |
+| `:area="..."` | Declare a named layout placeholder. | Framework-level layout vocabulary. Datastar handles the reactivity after composition is resolved. | `Locked` |
+| `:fill="..."` | Provide content for a named layout area. | Framework-level layout vocabulary. | `Locked` |
+| `:mount` | Mark the primary routed render target. | Framework-level router/layout vocabulary. Datastar then handles the mounted DOM reactively. | `Locked` |
+
+General rule:
+
+- `:mount` is the primary routed page target.
+- `:area` and `:fill` are the composition system.
+- `:use` and `:props` describe what gets loaded and what inputs it receives.
+- for component/template composition, `:props` should become local signals for the used block so inner Datastar bindings can stay simple
+
+## Dynamic DOM Directives
+
+These items do appear in the later review docs, but they are less fully reasoned than the core language and you explicitly flagged that they may not have been discussed to the same depth.
+
+| Syntax | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `:class.name="..."` | Toggle or bind a class reactively. | Maps cleanly to Datastar `data-class:name`. | `Review-doc present` |
+| `:set.name="..."` | Set a normal HTML attribute reactively. | Maps cleanly to Datastar `data-attr:name`. | `Review-doc present` |
+| `:loading="..."` | Surface loading state in markup. | Datastar has `data-indicator` for request-in-flight signals, plus `data-show`, `data-class`, and `data-attr` to render loading state. Brackets should probably compile to those primitives rather than invent a second loading system. | `Review-doc present` |
+| `:error="..."` | Surface request or validation error state in markup. | Datastar does not document a native `data-error` attribute in the free-core attributes reference. Brackets likely needs to treat this as authoring sugar over explicit error signals, fetch lifecycle events, or framework-managed state. | `Review-doc present` |
+
+Recommendation:
+
+- Keep `:class.name` and `:set.name` in the v1 language reference because they have clear Datastar mappings.
+- Keep `:loading` and `:error` documented, but label them as thinner and not yet as fully settled as the core directives.
+- In the current framework direction, `:loading="name"` and `:error="name"` should be able to bind to request state keyed by transport or module name so common loading/error UI needs less manual state code.
+
+## Built-In Expression Names And Scope Helpers
+
+These names are part of the public language inventory because they shape how authors think about expressions.
+
+| Name | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `self` | The current scope or current mounted instance. | Brackets scope sugar. Datastar still operates on the resolved signals underneath. | `Locked` |
+| `parent` | The nearest mounted parent scope, not the raw DOM parent. | Brackets scope sugar resolved to the parent's Datastar signal path. | `Locked` |
+| `children` | Runtime-maintained list of mounted child scopes. | Brackets scope sugar backed by scoped signals or derived values. | `Locked` |
+| `root` | The root scope for the current mounted tree. | Brackets scope sugar. | `Locked` |
+| `props` | Inputs passed into the current used template/component/page. | Brackets concept that should become scoped signals so Datastar can react to it. | `Locked` |
+| `event` | The current event in author-facing expressions. | Brackets-friendly alias over Datastar's event context. Datastar itself exposes `evt` in `data-on` expressions. | `Locked` |
+
+### Scope helper rule
+
+The important note direction is:
+
+- these helpers are sugar over Datastar signals
+- they are not a separate reactive store
+
+That is especially important for `parent`, `children`, and `props`.
+
+## Transport Helpers
+
+These helpers are part of the language, but they do not all mean the same kind of thing.
+
+Important distinction:
+
+- transport intent and result handling are different parts of the contract
+- helper names describe the action or channel being used
+- result suffixes describe how the response should be handled
+- `mutate()` is local state mutation and is not transport at all
+
+### Local mutation helper
+
+| Helper | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `mutate()` | The official author-facing write helper for local state. It patches or assigns scoped signal values. | Should compile to Datastar signal writes or signal patches. It is not a second store and not a replacement for Datastar reactivity. | `Locked` |
+
+Key rule from the notes:
+
+- `mutate()` is not the reactive engine
+- `mutate()` is the author-facing write path
+- Datastar still reacts to the resulting signal changes
+
+That means both of these can be conceptually equivalent:
+
+```html
+<button @click="qty++">+</button>
+<button @click="mutate('qty', qty + 1)">+</button>
+```
+
+### Request helpers
+
+| Helper | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `read()` | Live read channel, usually SSE-oriented. | Should align with Datastar backend requests and SSE response handling, not bypass them. | `Locked` |
+| `request()` | Advanced one-off read helper. Read-only. | Should still land on Datastar's request model and response handling. | `Locked` |
+| `get()` | One-off read request. | Strong fit with Datastar `@get()`. | `Locked` |
+| `create()` | Create a record or resource. | Strong fit with Datastar `@post()` or a framework-chosen create transport. | `Locked` |
+| `update()` | Full update of a record or resource. | Strong fit with Datastar `@put()`. | `Locked` |
+| `patch()` | Partial update of a record or resource. | Strong fit with Datastar `@patch()`. | `Locked` |
+| `delete()` | Delete a record or resource. | Strong fit with Datastar `@delete()`. | `Locked` |
+
+Brackets rule:
+
+- keep remote transport aligned with Datastar's backend action model
+- reserve framework-only transport layers for cases Datastar does not already cover, such as local `.data` adapters or same-origin hosting support
+
+Implementation note:
+
+- plain `get('/path')`, `create('/path')`, `update('/path')`, `patch('/path')`, and `delete('/path')` can compile directly to Datastar-native actions when no Brackets-only suffix behavior is being requested
+- plain `request('/path')` can compile directly to Datastar-native `@get('/path')` for the same reason
+- on form submit, Brackets can add Datastar's `contentType: 'form'` option automatically for the simple one-argument helper path so forms stay terse
+- suffix-based or framework-specific transport behavior can still use a thin Brackets bridge as long as Datastar remains the underlying request/response model
+
+### Default transport intent
+
+The default transport intent is:
+
+- `read()` uses an SSE/live channel by default
+- `request()` uses HTTP by default
+- `get()` uses HTTP by default
+- `create()` uses HTTP by default
+- `update()` uses HTTP by default
+- `patch()` uses HTTP by default
+- `delete()` uses HTTP by default
+- `mutate()` is local state mutation, not transport
+
+This is the rule that should shape both the docs and the implementation. Brackets names the helper. Datastar then handles the request or stream behavior underneath.
+
+## Backend-Agnostic File Contract
+
+This is one of the main architectural promises in the notes.
+
+| File kind | Role in Brackets |
+|---|---|
+| `.view` | declarative page manifest |
+| `.logic` | app behavior, router behavior, lifecycle behavior |
+| `.api` | remote/backend transport |
+| `.data` | local persistence and storage adapter layer |
+| `.html` | pages, layouts, components, fragments |
+
+Important split:
+
+- `.api` is not routing
+- `.api` is not local file persistence
+- `.data` is not remote transport
+- `.logic` is where routing belongs
+
+### Local storage formats
+
+The later review docs consistently describe these storage formats:
+
+| Format | Meaning in Brackets |
+|---|---|
+| `.json` | simple structured storage |
+| `.yaml` | human-editable config/content storage |
+| `.db` | durable local database storage, such as SQLite |
+
+Rule:
+
+- `.data` is the adapter/repository layer
+- `.json`, `.yaml`, and `.db` are the actual stored data files
+
+That lets Brackets stay backend agnostic while still supporting a complete local flat-file or SQLite-backed app experience through the built-in host.
+
+## Result Mode Suffixes
+
+These suffixes describe the expected result handling path. They do not define the transport by themselves.
+
+| Mode | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `.html` | Treat the result as HTML/UI patch content. | Datastar natively handles `text/html` patch responses. | `Locked` |
+| `.sse` | Treat the result as an SSE/live stream. | Datastar natively handles `text/event-stream`. | `Locked` |
+| `.state` | Treat the result as state patch data. | Datastar natively handles `application/json` signal patching. | `Locked` |
+| `.json` | Treat the result as JSON data. | Datastar natively handles `application/json`. Brackets can layer its own calling conventions on top. | `Locked` |
+
+### Default transport mapping
+
+The notes and follow-up review corrections lock this interpretation:
+
+- transport and result mode are separate
+- `read()` defaults to an SSE/live transport intent
+- `request()`, `get()`, `create()`, `update()`, `patch()`, and `delete()` default to HTTP transport intent
+- `.html`, `.sse`, `.state`, and `.json` describe how the result should be handled
+- `mutate()` is local signal/state mutation and has no transport mode
+
+This matters because it keeps Brackets aligned with Datastar's request model:
+
+- helper names describe the request or mutation intent
+- response content and suffixes describe the handling path
+- the framework should not confuse those two layers again
+
+## Runtime And Lifecycle Vocabulary
+
+### `page(...)`
+
+`page(...)` is the preferred declaration word for a routeable page manifest.
+
+Meaning in Brackets:
+
+- declare page identity
+- declare route metadata
+- point at page HTML
+- optionally point at layout, logic, api, and data
+
+Datastar relation:
+
+- this is framework vocabulary, not Datastar vocabulary
+- Datastar becomes relevant after the view is mounted and its HTML is live
+
+Status:
+
+- `Locked`
+
+### `print(...)`
+
+`print(...)` is reserved for render/output work, not manifest declaration.
+
+Meaning in Brackets:
+
+- render or output markup/content
+
+Datastar relation:
+
+- framework vocabulary, not Datastar vocabulary
+
+Status:
+
+- `Locked`
+
+### `ctx`
+
+`ctx` is the canonical runtime context object in `.logic`.
+
+The later review docs converge on a grouped shape:
+
+- `route`
+- `state`
+- `action`
+- `api`
+- `data`
+- `nav`
+- `cleanup()`
+
+Why that matters:
+
+- it keeps the language small
+- it avoids a giant helper bag
+- it prefers safe destructuring over magic locals
+
+Status:
+
+- `Locked`
+
+### Lifecycle and action contract
+
+| Name | Meaning in Brackets | Datastar relation | Status |
+|---|---|---|---|
+| `mount(ctx)` | This page or layout became live. Automatic lifecycle hook. | Framework lifecycle above Datastar. Datastar then drives the live DOM reactively. | `Locked` |
+| `sync(ctx)` | A preserved instance received new inputs and should update without remounting. | Framework lifecycle above Datastar. | `Locked` |
+| `run(payload, ctx)` | Imperative task entry point for advanced actions or framework-invoked tasks. Not automatic on mount. | Framework action contract, not a direct Datastar primitive. | `Locked` |
+| named actions | Ordinary UI behavior invoked from markup, such as `refresh(ctx)` or `createPost(ctx)`. | Often triggered by event syntax that compiles to Datastar event listeners. | `Locked` |
+| `ctx.cleanup(fn)` | Register teardown logic for the mounted instance. | Framework lifecycle support around Datastar-mounted behavior. | `Locked` |
+
+Critical rule from the notes:
+
+- `mount()` is lifecycle
+- `run()` is intent
+
+## Brackets To Datastar Mapping Summary
+
+This is the practical "work with Datastar, not around Datastar" table.
+
+| Brackets surface | Preferred Datastar target |
+|---|---|
+| `@event` | `data-on:event` |
+| `:state` | `data-signals` |
+| `:calc` | `data-computed` |
+| `:watch` | `data-effect` |
+| `:run` | `data-init` when used as markup setup/init behavior |
+| `:text` | `data-text` |
+| `:show` | `data-show` |
+| `:bind` | `data-bind` |
+| `:class.name` | `data-class:name` |
+| `:set.name` | `data-attr:name` |
+| `mutate()` | signal assignment or signal patch |
+| `get()/create()/update()/patch()/delete()` | Datastar backend actions and response handling |
+| `.html/.sse/.state/.json` | Datastar response content handling |
+
+Harmony rule:
+
+- authored `@event` syntax should always land on Datastar's `data-on:*` event system, including simple named actions such as `@click="refresh"`
+
+Items that are Brackets-first rather than Datastar-native:
+
+- `[name]`
+- `#name`
+- `:use`
+- `:props`
+- `:area`
+- `:fill`
+- `:mount`
+- `page()`
+- `print()`
+- `ctx`
+- `mount()/sync()/run()`
+
+Items that are language-locked but need framework implementation above Datastar rather than a direct free-core mapping:
+
+- `:if`
+- `:each`
+- `:html`
+- `:loading`
+- `:error`
+
+## Security Notes
+
+### 1. `:text` should be the default for user data
+
+Datastar `data-text` maps to text content, and OWASP specifically recommends safe sinks like `textContent` for text output.
+
+Implication for Brackets:
+
+- ordinary user content should go through `:text`
+- documentation should steer people away from `:html` unless they really mean markup
+
+### 2. `:html` must be trusted-only unless sanitized
+
+Datastar's security docs say user input should be escaped and unsafe input should not be trusted. OWASP also warns that inserting dynamic data into HTML contexts incorrectly can lead to XSS.
+
+Implication for Brackets:
+
+- treat `:html` as trusted-only by default
+- if a sanitizer is supported, document it explicitly and keep it conservative
+- never imply that `:html` is safe for arbitrary untrusted user content
+
+Current framework direction:
+
+- framework-managed `:html` rendering should use a conservative sanitization pass by default
+- truly trusted markup can still be rendered, but the framework should strip obviously dangerous sinks such as inline event handlers, `javascript:` URLs, and script tags
+
+### 3. Client validation is UX, not security
+
+OWASP is explicit that client-side validation can be bypassed and that server-side validation is required before processing input.
+
+Implication for Brackets:
+
+- `:bind`, `mutate()`, and client-side helpers can improve UX
+- they do not remove the need for backend validation
+- Datastar signals should never be treated as trusted server truth
+
+### 4. Datastar signals are visible and mutable in the client
+
+Datastar's security reference explicitly says signals are visible in source and can be modified before being sent to the backend.
+
+Implication for Brackets:
+
+- do not store sensitive secrets in client state
+- do not trust client signal values without backend validation
+- prefer backend-driven truth for permissions, authorization, and protected data
+
+### 5. Framework-only expressions should stay restricted
+
+Not every Brackets directive has a free-core Datastar equivalent. For the remaining framework-managed directives such as `:if`, `:each`, and `:html`, Brackets may still need local expression evaluation.
+
+Implication for Brackets:
+
+- do not fall back to broad `Function(...)` execution for framework-only expressions
+- use a restricted evaluator for data access, safe operators, object/array literals, and approved helper calls
+- prefer compiling to Datastar-native expressions everywhere else
+
+## Historical Note
+
+`Starting consept.md` contains a larger earlier exploration of `[]`-driven directive syntax such as:
+
+- `[state]`
+- `[text]`
+- `[show]`
+- `[bind]`
+- `[use]`
+- `[props]`
+- `[slot]`
+- `[fill]`
+- `[outlet]`
+- `[attr.foo]`
+- `[class.foo]`
+
+That is important history, but the later review docs repeatedly converge on the current mixed syntax model:
+
+- `[]` for structure
+- `#` for ids
+- `@` for events and behavior
+- `:` for directives
+
+So the mixed model is the current public language direction.

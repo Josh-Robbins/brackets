@@ -1,0 +1,13 @@
+({
+  async summary({ http }) {
+    return http.client('/remote/api').get('summary')
+  },
+
+  async status({ http }) {
+    return http.client('/remote/api').get('status')
+  },
+
+  stream({ http }) {
+    return http.client('/remote').read('events/counts')
+  }
+})

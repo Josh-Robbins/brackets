@@ -1,0 +1,9 @@
+({
+  async list({ storage }) {
+    return storage.json('@storage/contacts.json').read()
+  },
+
+  async save({ storage }, records) {
+    return storage.json('@storage/contacts.json').write(records)
+  }
+})
