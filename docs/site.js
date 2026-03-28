@@ -1,7 +1,8 @@
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const isMobileViewport = window.matchMedia('(max-width: 780px)');
 
 function attachHeroParallax() {
-  if (prefersReducedMotion.matches) {
+  if (prefersReducedMotion.matches || isMobileViewport.matches) {
     return;
   }
 
