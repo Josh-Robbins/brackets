@@ -12,6 +12,13 @@ Those links are relative on purpose so they work:
 - in editors
 - on GitHub after the project is published
 
+Current status:
+
+- Brackets is being kept at `v0.95`
+- syntax is locked
+- Datastar is the engine
+- the current goal is wider production-style testing, not public syntax churn
+
 ## What Brackets is
 
 Brackets is:
@@ -29,6 +36,113 @@ You should be able to:
 - keep your app as normal files
 - copy that same app to a server later
 - connect it to any backend when needed
+
+## First hour
+
+If you are brand new to Brackets, do this first:
+
+1. Read this file once from top to bottom.
+2. Run `node src/cli.js check demo/app`.
+3. Run `node src/cli.js doctor demo/app --strict`.
+4. Start the demo host and click through the demo app.
+5. Read [docs/guide.md](./docs/guide.md) for practical patterns.
+6. Read [docs/reference.md](./docs/reference.md) only when you need the exact contract.
+
+That order keeps the framework approachable without hiding the deeper rules.
+
+## Dynamic app, static shape
+
+Brackets should behave like a real application even when the app starts as plain files in a folder.
+
+That means the framework should absolutely support:
+
+- dynamic UI and app behavior
+- local persistence and local database use
+- offline and local-first workflows
+- optional shared trusted server authority through `.api`
+
+So the boundary is:
+
+- `.view` and `.html` define the UI
+- `.logic` defines app behavior
+- `.data` defines the model layer, local data rules, queries, validation, transforms, and persistence behavior
+- `.db`, `.json`, and `.yaml` hold runtime data
+- `.api` is optional remote sync, external services, and shared authority
+
+From the user's point of view, that is still a dynamic framework, not a document site.
+
+### Runtime flow
+
+The intended runtime flow is:
+
+1. `.data` defines how the data behaves
+2. the runtime or host manages local storage such as `.json`, `.yaml`, and `.db`
+3. `.logic` reads and writes through the `.data` contract
+4. `.view` and `.html` react through Datastar
+
+Datastar transfer boundary:
+
+- `.data` is still the local-first model layer, but when it transfers or streams data into the UI it should do that through Datastar-compatible HTTP and SSE behavior
+- `.api` is the remote/shared-authority layer, and it should use the same Datastar-compatible HTTP and SSE behavior for backend sync
+- Brackets should not invent a separate transport protocol under either layer
+- overlapping keyed requests should cancel superseded work without dropping the next request's loading state early
+- cached reads should deduplicate overlapping loads and preserve stale data during failed background refreshes
+- overlapping transport requests should keep page-level loading and error state aligned with the latest active request
+- failed route warming and failed session refreshes should be retryable instead of leaving the runtime stuck in a poisoned state
+- protected routes should re-check session state before redirecting when the current session is missing or unauthenticated, so login recovery and paired-backend auth stay reliable
+- configured route prefetch should follow navigation, not just the first page load
+- redirect loops should fail clearly instead of recursing forever through router hooks or redirect routes
+- `notFound()` redirects should choose the final destination before history is updated
+- a `notFound()` redirect back to the same path should fall back to the normal not-found view
+- live `read()` transport should fail with a clear framework error if SSE is unavailable in the current host
+- live `read()` loading should stay active until the SSE stream actually opens
+- live SSE failures should surface as clear Brackets transport errors instead of raw browser event objects
+- form payload merges should preserve repeated field values instead of collapsing arrays into comma strings
+- form requests should also accept direct `FormData` payloads without requiring DOM form lookup first
+- local `.json`, `.yaml`, and encrypted storage writes should stay serialized and readable under overlap
+- `.db` transactions should stay serialized under overlap so local-first apps keep a dependable model layer
+- invalidating cache should prevent older in-flight reads from silently repopulating cleared keys
+
+Datastar-first implementation boundary:
+
+- `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, and `:set.*` should compile to native Datastar attributes
+- authored `@event` syntax should land on Datastar `data-on:*`
+- simple `read()`, `request()`, `get()`, `create()`, `update()`, `patch()`, `delete()`, and `mutate()` paths should compile to Datastar-native behavior when there is a clean one-to-one fit
+- only framework-specific surfaces such as `:use`, `:props`, `:area`, `:fill`, `:mount`, `:if`, `:each`, `:html`, `:loading`, and `:error` should stay on the Brackets-owned side
+
+That keeps the architecture modern without giving up the portable file-first model.
+
+### Deployment profiles
+
+Brackets should support three clear authority profiles:
+
+- desktop-folder or local-host profile
+  `.data` may persist to real local `.json`, `.yaml`, and `.db` files through the built-in host or another host adapter
+- static-server profile
+  the UI, routing, state, offline behavior, and local-first workflow still work, while shared trusted writes stay optional through `.api`
+- paired-backend profile
+  `.api` provides shared authority, sync, and external services without changing the app model
+
+The important promise is not "every deployment writes server files directly."
+
+The important promise is:
+
+- the same Brackets app model stays dynamic
+- the same app can move from desktop folder to server to paired backend
+- Datastar still drives the frontend reality
+
+### Teaching shortcut
+
+When explaining Brackets to a new developer, teach it in this order:
+
+1. `.view` and `.html` define the UI
+2. `.logic` defines what the app does
+3. `.data` defines the model and local persistence rules
+4. `.api` is optional shared authority and remote sync
+5. Datastar powers the reactive frontend behavior underneath all of it
+6. `.data` and `.api` both preserve Datastar-shaped HTTP and SSE transfer when data moves
+
+That gives people the right model quickly without pulling them into framework internals first.
 
 ## Start here
 
@@ -55,6 +169,25 @@ Brackets/
 
 You do not need to create folders inside `app/` unless the app grows enough to need them.
 
+## Where code goes
+
+This is the simplest reliable Brackets rule:
+
+- `.view` says what page exists
+- `.html` says what the page looks like
+- `.logic` says when the app should do something
+- `.data` says what the data is and how it behaves
+- `.api` says how the app talks to shared authority or external services
+
+Use that split first.
+
+It keeps apps:
+
+- easier to teach
+- easier to test
+- easier to move between local-first and backend-connected setups
+- easier for AI and humans to reason about
+
 ## Config
 
 Brackets supports a simple config file for the host and starter experience.
@@ -69,6 +202,7 @@ Use it for:
 - host address
 - port number
 - HTML trust policy
+- encrypted local storage key settings
 - splash title
 - splash tagline
 - accent and panel colors
@@ -84,6 +218,9 @@ server:
 
 security:
   html: sanitize
+  storage:
+    keyEnv: BRACKETS_DATA_KEY
+    pbkdf2Iterations: 250000
 
 branding:
   name: Brackets
@@ -121,6 +258,54 @@ The startup page is meant to feel alive and reassuring: clear readiness status, 
 - `sanitize` for the safe default
 - `trusted` only when the app intentionally wants raw HTML insertion
 
+Encrypted local persistence can use:
+
+- `security.storage.keyEnv` to name the host environment variable that holds the encryption passphrase
+- `security.storage.pbkdf2Iterations` to tune host-side key stretching for the built-in encrypted storage helpers
+
+## Encrypted local persistence
+
+Brackets should keep encrypted local persistence as an optional host capability.
+
+This fits the framework principles because:
+
+- it does not change Brackets syntax
+- it keeps `.data` as the local persistence contract
+- it keeps secrets out of app files
+- it works with the built-in host today and can be implemented by other hosts later
+
+Current built-in host path:
+
+- set `BRACKETS_DATA_KEY` in the host environment, or change `security.storage.keyEnv`
+- use `storage['[e]json'](...)` or `storage['[e]yaml'](...)` inside `.data`
+- keep `.db` encryption host-specific unless the host can provide it safely
+
+Example:
+
+```js
+({
+  profile({ storage }) {
+    return storage['[e]json']('@storage/profile.secure.json').read({})
+  },
+
+  saveProfile({ storage }, nextValue) {
+    return storage['[e]json']('@storage/profile.secure.json').write(nextValue)
+  }
+})
+```
+
+Short-name note:
+
+- `storage['[e]json'](...)` and `storage['[e]yaml'](...)` are the expressive public names
+- `ejson(...)`, `eyaml(...)`, `secureJson(...)`, and `secureYaml(...)` remain compatibility aliases underneath
+
+Security rule:
+
+- encrypted local persistence helps protect data at rest on the machine or in the app folder
+- it does not turn local data into trusted shared authority
+- auth, authorization, and shared truth should still live in a trusted host or backend when the app needs them
+- host-managed session cookies should stay local-safe on plain HTTP and upgrade to `Secure` host cookies automatically on HTTPS deployments
+
 ## Type safety without a build step
 
 Brackets treats type safety as a runtime framework feature.
@@ -137,7 +322,10 @@ First-class runtime contracts include:
 
 - `page()` manifests
 - `config/brackets.yaml` and `config/brackets.json`
+- `.logic`, `.api`, and `.data` module exports
+- `router.logic` and `/routes/*.logic`
 - RPC payloads for `.api` and `.data`
+- duplicate page ids and route path collisions
 
 Use the CLI check when you want a no-build type report with file and line locations:
 
@@ -145,6 +333,19 @@ Use the CLI check when you want a no-build type report with file and line locati
 node src/cli.js check demo/app
 node src/cli.js check demo/app --json
 ```
+
+It should catch things like:
+
+- wrong field types
+- bad module export shapes
+- duplicate page ids
+- route and alias collisions
+- self-redirecting route definitions
+- multi-route redirect cycles
+- not-found redirects that would otherwise leave dead history entries
+- missing `.html`, `.logic`, `.api`, and `.data` references
+- references that try to escape outside the app root
+- architecture drift between `.logic`, `.data`, and `.api`
 
 When something is wrong, Brackets should return structured errors, not just vague crashes.
 
@@ -161,6 +362,147 @@ This is the no-build tradeoff done the right way:
 - keep syntax locked
 - keep Datastar as the engine
 - still fail early with useful contract errors
+
+Recommended everyday quality loop:
+
+```powershell
+node src/cli.js check app
+node src/cli.js doctor app --strict
+node --test tests/test.js
+```
+
+That is the shortest path to a serious Brackets app without introducing a build step.
+
+## Write small, clean, type-safe files
+
+Brackets works best when each file type stays focused and small.
+
+Preferred shape:
+
+- `.view` stays declarative
+- `.html` stays presentational
+- `.logic` stays orchestration-first
+- `.data` stays model-first
+- `.api` stays transport-first
+
+That gives you smaller files, clearer runtime errors, and better `check` diagnostics without needing a build step.
+
+### Small `.view`
+
+Keep `.view` focused on page identity and wiring:
+
+```js
+page({
+  id: 'home',
+  route: '/',
+  html: '@app/home.html',
+  logic: '@app/home.logic'
+})
+```
+
+Good rule:
+
+- put page identity, route, layout, meta, `api`, and `data` wiring here
+- do not put business logic here
+
+### Small `.html`
+
+Keep `.html` focused on structure and bindings:
+
+```html
+<main [page] :state="{ count: 0 }">
+  <h1 :text="title"></h1>
+  <p :text="count"></p>
+  <button @click="increment">Add</button>
+</main>
+```
+
+Good rule:
+
+- prefer `:text`, `:show`, `:bind`, and named actions
+- do not hide model code inside markup
+
+### Small `.logic`
+
+Keep `.logic` focused on orchestration and user intent:
+
+```js
+({
+  async mount({ data, state }) {
+    state.set({ contacts: await data.contacts.list() })
+  },
+
+  async saveContact({ data, state, action }) {
+    const contacts = await data.contacts.add(action.input() ?? {})
+    state.set({ contacts })
+  }
+})
+```
+
+`ctx.action.input()` should stay friendly for normal forms: repeated field names should come through as arrays instead of being flattened away.
+
+Good rule:
+
+- `.logic` decides when to load, save, refresh, and navigate
+- `.logic` should not own validation, normalization, queries, or storage code when `.data` can own them
+
+### Small `.data`
+
+Keep `.data` focused on the model:
+
+```js
+function normalizeContact(input) {
+  return {
+    id: Number(input?.id) || Date.now(),
+    name: String(input?.name ?? '').trim()
+  }
+}
+
+function validContact(contact) {
+  return Boolean(contact.name)
+}
+
+({
+  async list({ storage }) {
+    const records = await storage.json('@storage/contacts.json').read([])
+    return records.map(normalizeContact).filter(validContact)
+  }
+})
+```
+
+Good rule:
+
+- `.data` should own most, and ideally all, model code when that makes sense
+- keep validation, transforms, queries, and persistence rules here
+
+### Small `.api`
+
+Keep `.api` focused on remote/backend transport:
+
+```js
+({
+  list({ http }) {
+    return http.client('/remote/crm').get('/contacts')
+  }
+})
+```
+
+Good rule:
+
+- keep backend paths, headers, OpenAPI operations, and remote sync here
+- do not mix local storage rules into `.api`
+
+### Type-safe teaching rule
+
+If a file starts getting hard to explain in one sentence, it probably owns too much.
+
+Teach the files like this:
+
+- `.view`: what page exists
+- `.html`: what the user sees
+- `.logic`: what the app does
+- `.data`: what the data is
+- `.api`: how the app talks outward
 
 ## Plugins and extensions
 
@@ -354,6 +696,28 @@ Additive router powers:
 - `redirectTo` for lightweight redirects
 - `params` for param validation
 - `preload` for route warming hints
+- route-target navigation helpers so code can use route ids plus params/query/hash instead of raw strings everywhere
+
+Preferred navigation style:
+
+```js
+ctx.nav.to({
+  id: 'contact',
+  params: { id: contact.id },
+  query: { tab: 'notes' },
+  hash: 'activity'
+})
+```
+
+Also available:
+
+- `ctx.nav.href(target)`
+- `ctx.nav.isActive(target)`
+- `ctx.nav.match(target)`
+- `ctx.nav.forward()`
+- `ctx.route.href(next?)` for the current route
+- `ctx.route.isActive(next?)` for current-route checks
+- router hooks also receive route-aware `to.href()`, `from?.href()`, and route metadata with aliases
 
 Read more:
 

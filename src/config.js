@@ -33,7 +33,11 @@ export const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     ]
   },
   security: {
-    html: 'sanitize'
+    html: 'sanitize',
+    storage: {
+      keyEnv: 'BRACKETS_DATA_KEY',
+      pbkdf2Iterations: 250000
+    }
   }
 });
 
@@ -101,6 +105,11 @@ function normalizeConfig(config, appRoot) {
   merged.security.html = merged.security.html === 'trusted'
     ? 'trusted'
     : DEFAULT_BRACKETS_CONFIG.security.html;
+  merged.security.storage ||= {};
+  merged.security.storage.keyEnv ||= DEFAULT_BRACKETS_CONFIG.security.storage.keyEnv;
+  merged.security.storage.pbkdf2Iterations = Number.isInteger(merged.security.storage.pbkdf2Iterations) && merged.security.storage.pbkdf2Iterations > 0
+    ? merged.security.storage.pbkdf2Iterations
+    : DEFAULT_BRACKETS_CONFIG.security.storage.pbkdf2Iterations;
   return merged;
 }
 

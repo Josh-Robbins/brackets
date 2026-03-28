@@ -10,24 +10,7 @@
 
   async addContact({ data, state, action }) {
     const form = action.input() ?? {}
-    const name = (form.name ?? '').trim()
-    const source = (form.source ?? 'desktop').trim()
-
-    if (!name) {
-      return
-    }
-
-    const current = state.get().contacts ?? []
-    const next = [
-      ...current,
-      {
-        id: Date.now(),
-        name,
-        source
-      }
-    ]
-
-    await data.contacts.save(next)
+    const next = await data.contacts.add(form)
     state.set({
       contacts: next,
       draftName: '',

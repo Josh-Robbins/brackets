@@ -85,10 +85,16 @@ class HttpError extends Error {
 function cleanJoin(rootDir, requestPath) {
   const relative = requestPath.replace(/^\/+/, '').split('/').join(path.sep);
   const resolved = path.resolve(rootDir, relative);
-  if (!resolved.startsWith(path.resolve(rootDir))) {
-    throw new Error(`Blocked path traversal for ${requestPath}`);
+  return ensureWithinRoot(rootDir, resolved, requestPath);
+}
+
+function ensureWithinRoot(rootDir, resolvedPath, label = 'path') {
+  const normalizedRoot = path.resolve(rootDir);
+  const normalizedPath = path.resolve(resolvedPath);
+  if (normalizedPath !== normalizedRoot && !normalizedPath.startsWith(`${normalizedRoot}${path.sep}`)) {
+    throw new HttpError(400, `Blocked reference outside app root: ${label}`);
   }
-  return resolved;
+  return normalizedPath;
 }
 
 function toAppUrl(filePath, appRoot) {
@@ -111,7 +117,7 @@ function resolveAppSpecifier(specifier, appRoot, baseDir = appRoot) {
 
   for (const [alias, target] of Object.entries(aliasMap)) {
     if (specifier.startsWith(alias)) {
-      return path.join(appRoot, target, specifier.slice(alias.length));
+      return ensureWithinRoot(appRoot, path.join(appRoot, target, specifier.slice(alias.length)), specifier);
     }
   }
 
@@ -119,7 +125,7 @@ function resolveAppSpecifier(specifier, appRoot, baseDir = appRoot) {
     return cleanJoin(appRoot, specifier.slice('/app/'.length));
   }
 
-  return path.resolve(baseDir, specifier);
+  return ensureWithinRoot(appRoot, path.resolve(baseDir, specifier), specifier);
 }
 
 function normalizeByteLimit(limit, fallback) {
@@ -1120,8 +1126,10 @@ function createOpenApiFormBody(payload = {}, asMultipart = false) {
   }));
 }
 
-function createRpcHelpers(appRoot, serverOrigin, authState) {
-  const storage = createStorageHelpers((specifier) => resolveAppSpecifier(specifier, appRoot));
+function createRpcHelpers(appRoot, serverOrigin, authState, appSecurity = {}) {
+  const storage = createStorageHelpers((specifier) => resolveAppSpecifier(specifier, appRoot), {
+    security: appSecurity
+  });
   const request = async (method, url, payload, options = {}) => {
     const requestOptions = mergeHttpOptions({}, options);
     const targetUrl = new URL(url, serverOrigin);
@@ -1370,6 +1378,40 @@ function isSameOriginRequest(req, serverOrigin) {
   return true;
 }
 
+function isSecureRequest(req) {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] ?? '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+
+  return forwardedProto === 'https' || Boolean(req.socket?.encrypted);
+}
+
+function resolveCsrfCookieName(req, configuredName = null) {
+  if (configuredName) {
+    return configuredName;
+  }
+
+  return isSecureRequest(req)
+    ? '__Host-brackets-csrf'
+    : 'brackets-csrf';
+}
+
+function buildCsrfCookie(req, name, token) {
+  const parts = [
+    `${name}=${encodeURIComponent(token)}`,
+    'Path=/',
+    'SameSite=Lax',
+    'HttpOnly'
+  ];
+
+  if (isSecureRequest(req)) {
+    parts.push('Secure');
+  }
+
+  return parts.join('; ');
+}
+
 function validateRpcPayload(payload) {
   const { kind, moduleUrl, method, args = [] } = payload ?? {};
   const issues = [];
@@ -1405,7 +1447,7 @@ function validateRpcPayload(payload) {
   });
 }
 
-async function invokeRpc(appRoot, payload, serverOrigin, authState) {
+async function invokeRpc(appRoot, payload, serverOrigin, authState, appSecurity = {}) {
   validateRpcPayload(payload);
   const { kind, moduleUrl, method, args = [] } = payload;
 
@@ -1416,8 +1458,8 @@ async function invokeRpc(appRoot, payload, serverOrigin, authState) {
     throw new HttpError(404, `Missing ${kind} method ${method} in ${moduleUrl}`);
   }
 
-  const helpers = createRpcHelpers(appRoot, serverOrigin, authState);
-  return callable(helpers, ...args);
+  const helpers = createRpcHelpers(appRoot, serverOrigin, authState, appSecurity);
+  return callable.call(exported, helpers, ...args);
 }
 
 function buildImportMap() {
@@ -1514,7 +1556,7 @@ export async function createServer({
   const normalizedRpcBodyLimitBytes = normalizeByteLimit(rpcBodyLimitBytes, DEFAULT_RPC_BODY_LIMIT_BYTES);
   const hostContract = buildHostContract(serverOrigin, resolvedAppRoot, appConfig);
   const defaultSession = auth.session ?? { authenticated: false, user: null };
-  const csrfCookieName = auth.csrfCookieName ?? '__Host-brackets-csrf';
+  const configuredCsrfCookieName = auth.csrfCookieName ?? null;
   const csrfHeaderName = auth.csrfHeaderName ?? 'x-brackets-csrf';
 
   const server = http.createServer(async (req, res) => {
@@ -1532,8 +1574,10 @@ export async function createServer({
       }
 
       const url = new URL(req.url, 'http://127.0.0.1');
+      const csrfCookieName = resolveCsrfCookieName(req, configuredCsrfCookieName);
       const cookies = parseCookies(req.headers.cookie ?? '');
       const csrfToken = cookies[csrfCookieName] ?? crypto.randomBytes(16).toString('hex');
+      const csrfCookie = buildCsrfCookie(req, csrfCookieName, csrfToken);
       const sessionState = {
         ...defaultSession,
         csrfToken
@@ -1621,7 +1665,7 @@ export async function createServer({
 
       if (url.pathname === '/__brackets/session') {
         send(res, 200, 'application/json; charset=utf-8', json(sessionState), true, {
-          'Set-Cookie': `${csrfCookieName}=${encodeURIComponent(csrfToken)}; Path=/; SameSite=Lax; HttpOnly`
+          'Set-Cookie': csrfCookie
         });
         return;
       }
@@ -1660,7 +1704,7 @@ export async function createServer({
           throw new HttpError(403, 'Blocked RPC request with invalid CSRF token');
         }
         const payload = await parseBody(req, normalizedRpcBodyLimitBytes);
-        const result = await invokeRpc(resolvedAppRoot, payload, serverOrigin, sessionState);
+        const result = await invokeRpc(resolvedAppRoot, payload, serverOrigin, sessionState, appConfig.security);
         send(res, 200, 'application/json; charset=utf-8', json({ result }));
         return;
       }
@@ -1773,7 +1817,7 @@ export async function createServer({
           appConfig,
           appConfigPath
         }), true, {
-          'Set-Cookie': `${csrfCookieName}=${encodeURIComponent(csrfToken)}; Path=/; SameSite=Lax; HttpOnly`
+          'Set-Cookie': csrfCookie
         });
         return;
       }

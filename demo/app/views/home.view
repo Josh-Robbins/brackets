@@ -3,6 +3,7 @@ page({
   route: '/',
   title: 'Brackets Home',
   meta: {
+    lang: 'en',
     description: 'Brackets demo home page with local data, remote transport, and Datastar-powered interactivity.'
   },
   seo: {

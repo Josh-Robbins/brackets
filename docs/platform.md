@@ -88,6 +88,40 @@ Current guarantees in the built-in host adapter:
 - serialized local file access
 - SQLite-backed `.db` access
 - adapter cleanup on host shutdown
+- encrypted local persistence for JSON and YAML through host-managed keys
+
+Directional architecture:
+
+- `.data` defines the data model and persistence rules
+- the runtime or host manages `.json`, `.yaml`, and `.db`
+- `.logic` reads and writes through `.data`
+- `.view` and `.html` react through Datastar
+
+This keeps the framework file-first while still behaving like a dynamic application framework.
+
+## 4A. Authority Profiles
+
+Brackets should support three clear authority profiles without changing the app model:
+
+- local authority
+  desktop-folder or host-adapter mode where `.data` can persist to real local `.json`, `.yaml`, and `.db` files
+- browser-local authority
+  static-host mode where UI, state, routes, and offline behavior still work, but local storage remains machine-local and untrusted
+- shared authority
+  remote or installed backend authority through `.api`
+
+This is the intended boundary:
+
+- dynamic UI and app behavior: yes
+- local persistence and local database: yes
+- offline and local-first workflows: yes
+- shared trusted server authority: optional, through `.api`
+
+Security note:
+
+- local or browser-held persistence should not be treated as trusted authority for authentication or authorization decisions
+- shared security decisions still belong to a trusted backend or host authority when an app needs them
+- encrypted local persistence is an optional host capability, not a replacement for trusted shared authority
 
 ## 5. Host Adapter Contract
 

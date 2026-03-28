@@ -112,6 +112,19 @@ function validateStringRecord(issues, value, fieldPath) {
   }
 }
 
+function validateFunctionRecord(issues, value, fieldPath) {
+  if (!isPlainObject(value)) {
+    issues.push(createIssue(fieldPath, 'an object', describeValueType(value)));
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry !== 'function') {
+      issues.push(createIssue(`${fieldPath}.${key}`, 'a function', describeValueType(entry)));
+    }
+  }
+}
+
 export const BRACKETS_CONFIG_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://brackets.dev/schemas/brackets-config.json',
@@ -142,7 +155,15 @@ export const BRACKETS_CONFIG_SCHEMA = {
     security: {
       type: 'object',
       properties: {
-        html: { enum: ['sanitize', 'trusted'] }
+        html: { enum: ['sanitize', 'trusted'] },
+        storage: {
+          type: 'object',
+          properties: {
+            keyEnv: { type: 'string' },
+            pbkdf2Iterations: { type: 'integer', minimum: 1 }
+          },
+          additionalProperties: true
+        }
       },
       additionalProperties: true
     }
@@ -200,8 +221,27 @@ export function validateBracketsConfig(config, context = 'Brackets config') {
   if (config.security !== undefined) {
     if (!isPlainObject(config.security)) {
       issues.push(createIssue(`${context}.security`, 'an object', describeValueType(config.security)));
-    } else if (config.security.html !== undefined && !['sanitize', 'trusted'].includes(config.security.html)) {
-      issues.push(createIssue(`${context}.security.html`, '"sanitize" or "trusted"', JSON.stringify(config.security.html)));
+    } else {
+      if (config.security.html !== undefined && !['sanitize', 'trusted'].includes(config.security.html)) {
+        issues.push(createIssue(`${context}.security.html`, '"sanitize" or "trusted"', JSON.stringify(config.security.html)));
+      }
+
+      if (config.security.storage !== undefined) {
+        if (!isPlainObject(config.security.storage)) {
+          issues.push(createIssue(`${context}.security.storage`, 'an object', describeValueType(config.security.storage)));
+        } else {
+          validateStringField(issues, config.security.storage.keyEnv, `${context}.security.storage.keyEnv`);
+          if (config.security.storage.pbkdf2Iterations !== undefined) {
+            if (!Number.isInteger(config.security.storage.pbkdf2Iterations) || config.security.storage.pbkdf2Iterations < 1) {
+              issues.push(createIssue(
+                `${context}.security.storage.pbkdf2Iterations`,
+                'a positive integer',
+                describeValueType(config.security.storage.pbkdf2Iterations)
+              ));
+            }
+          }
+        }
+      }
     }
   }
 
@@ -257,6 +297,96 @@ export function validatePageManifestContract(definition, {
   throwContractIssues(`${context} is invalid`, issues, {
     code: 'BRACKETS_PAGE_INVALID',
     hint: 'Check the page manifest field names and make sure string maps like params, api, and data only contain strings.'
+  });
+
+  return definition;
+}
+
+export function validateLogicModuleContract(definition, context = 'Brackets logic module') {
+  const issues = [];
+
+  if (!isPlainObject(definition)) {
+    throwContractIssues(`${context} is invalid`, [
+      createIssue(context, 'an object', describeValueType(definition))
+    ], {
+      code: 'BRACKETS_LOGIC_INVALID',
+      hint: 'Export an object from .logic files. Use mount(), sync(), run(), and named action functions for behavior.'
+    });
+  }
+
+  for (const [key, value] of Object.entries(definition)) {
+    if (typeof value !== 'function') {
+      issues.push(createIssue(`${context}.${key}`, 'a function', describeValueType(value)));
+    }
+  }
+
+  throwContractIssues(`${context} is invalid`, issues, {
+    code: 'BRACKETS_LOGIC_INVALID',
+    hint: 'Brackets .logic files should export an object of functions. Use mount(), sync(), run(), and named actions as function members.'
+  });
+
+  return definition;
+}
+
+export function validateRpcModuleContract(definition, {
+  context = 'Brackets RPC module',
+  code = 'BRACKETS_RPC_MODULE_INVALID',
+  kind = 'module'
+} = {}) {
+  const issues = [];
+
+  if (!isPlainObject(definition)) {
+    throwContractIssues(`${context} is invalid`, [
+      createIssue(context, 'an object', describeValueType(definition))
+    ], {
+      code,
+      hint: `Export an object from .${kind} files and expose callable methods as functions.`
+    });
+  }
+
+  validateFunctionRecord(issues, definition, context);
+
+  throwContractIssues(`${context} is invalid`, issues, {
+    code,
+    hint: `Brackets .${kind} files should export an object whose members are functions.`
+  });
+
+  return definition;
+}
+
+export function validateRouterModuleContract(definition, context = 'Brackets router.logic module') {
+  const issues = [];
+
+  if (Array.isArray(definition)) {
+    return definition;
+  }
+
+  if (!isPlainObject(definition)) {
+    throwContractIssues(`${context} is invalid`, [
+      createIssue(context, 'an object or route array', describeValueType(definition))
+    ], {
+      code: 'BRACKETS_ROUTER_INVALID',
+      hint: 'Export a route array or an object with optional defaults, routes, and router hooks like beforeEach().'
+    });
+  }
+
+  if (definition.defaults !== undefined && !isPlainObject(definition.defaults)) {
+    issues.push(createIssue(`${context}.defaults`, 'an object', describeValueType(definition.defaults)));
+  }
+
+  if (definition.routes !== undefined && !Array.isArray(definition.routes)) {
+    issues.push(createIssue(`${context}.routes`, 'an array', describeValueType(definition.routes)));
+  }
+
+  for (const field of ['beforeEach', 'afterEach', 'notFound']) {
+    if (definition[field] !== undefined && typeof definition[field] !== 'function') {
+      issues.push(createIssue(`${context}.${field}`, 'a function', describeValueType(definition[field])));
+    }
+  }
+
+  throwContractIssues(`${context} is invalid`, issues, {
+    code: 'BRACKETS_ROUTER_INVALID',
+    hint: 'router.logic and /routes/*.logic should use object-shaped router config with function hooks and array-based routes when present.'
   });
 
   return definition;

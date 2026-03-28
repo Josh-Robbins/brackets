@@ -20,6 +20,13 @@ Before going deep, also read:
 - [reference.md](./reference.md) for the language contract
 - [platform.md](./platform.md) for host and deployment expectations
 
+Current public status:
+
+- keep calling Brackets `v0.95`
+- keep syntax locked
+- keep Datastar as the engine
+- optimize for outside testing and production-style evaluation, not public contract churn
+
 ## Core identity
 
 Brackets is:
@@ -49,6 +56,48 @@ Brackets adds:
 - the tiny same-origin host when needed
 - the local `.data` contract
 - the backend-agnostic `.api` contract
+
+## Dynamic authority model
+
+AI should treat Brackets as a real application framework even when the app begins as plain files.
+
+Use this boundary:
+
+- dynamic UI and app behavior: yes
+- local persistence and local database: yes
+- offline and local-first workflows: yes
+- shared trusted server authority: optional, through `.api`
+
+Architectural split:
+
+- `.view` and `.html` = UI
+- `.logic` = app behavior
+- `.data` = data model and persistence rules
+- `.db`, `.json`, and `.yaml` = runtime storage
+- `.api` = optional remote sync and external services
+
+Transport rule:
+
+- `.data` stays local-first, but should preserve Datastar-compatible HTTP and SSE transfer when it moves data into the live UI
+- `.api` stays remote/shared-authority-facing, and should preserve that same Datastar-compatible HTTP and SSE transfer behavior
+- do not invent a second transport model underneath those layers
+
+Important AI rule:
+
+- do not assume every deployment has shared server-side write authority
+- do not assume local persistence is trusted authority for auth or security decisions
+- keep the same app model portable from local authority to shared authority
+- treat encrypted persistence as a host capability that can strengthen data-at-rest protection without changing Brackets syntax
+- when teaching Brackets, prefer the smallest path first, then grow into structure only when the app needs it
+
+Small-file rule:
+
+- keep `.view` declarative
+- keep `.html` presentational
+- keep `.logic` orchestration-first
+- keep `.data` model-first
+- keep `.api` transport-first
+- if a file cannot be explained in one sentence, split it before adding new framework concepts
 
 ## Plugin guidance
 

@@ -12,6 +12,7 @@ It is intentionally biased toward the project goals:
 - no external app server required for local use
 - no browser CORS friction for the normal local workflow
 - backend agnostic by design
+- local-first and authority-flexible by design
 - usable for SPAs, websites, web apps, and desktop apps
 - Datastar remains the engine
 
@@ -118,6 +119,13 @@ Important split:
 - `.api` = remote/backend transport contract
 - `.data` = local persistence and storage adapter contract
 - `.json`, `.yaml`, `.db` = actual local storage formats
+
+Directional runtime flow:
+
+- `.data` defines local data rules
+- the runtime or host manages `.json`, `.yaml`, and `.db`
+- `.logic` reads and writes
+- `.view` / `.html` react through Datastar
 
 That means the tiny local host is not "the backend" in the architectural sense. It is the same-origin runtime shell that can also expose local `.data` capabilities when the app uses flat-file or SQLite-backed local persistence.
 

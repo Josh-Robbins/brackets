@@ -49,6 +49,7 @@ const FRAMEWORK_CONSTANTS = Object.freeze({
   null: null,
   undefined
 });
+const MAX_NAVIGATION_REDIRECTS = 12;
 
 function safeText(value) {
   return String(value ?? '')
@@ -853,6 +854,89 @@ export function normalizeRouterRedirect(result) {
   return null;
 }
 
+export function resolveNotFoundResult(result, currentPath = null, origin = 'http://127.0.0.1') {
+  const redirect = normalizeRouterRedirect(result);
+  if (redirect) {
+    const nextRedirectPath = createLocationSnapshot(redirect.path, origin).path;
+    const activePath = currentPath
+      ? createLocationSnapshot(currentPath, origin).path
+      : null;
+
+    if (activePath && nextRedirectPath === activePath) {
+      return {
+        kind: 'default',
+        result,
+        updateHistory: true
+      };
+    }
+
+    return {
+      kind: 'redirect',
+      redirect,
+      updateHistory: false
+    };
+  }
+
+  if (result && typeof result === 'object' && typeof result.html === 'string') {
+    return {
+      kind: 'html',
+      result,
+      updateHistory: true
+    };
+  }
+
+  return {
+    kind: 'default',
+    result,
+    updateHistory: true
+  };
+}
+
+export function extendNavigationRedirectChain(chain = [], nextPath, origin = 'http://127.0.0.1', limit = MAX_NAVIGATION_REDIRECTS) {
+  const history = Array.isArray(chain) ? [...chain] : [];
+  const normalizedPath = createLocationSnapshot(nextPath, origin).path;
+
+  if (history.includes(normalizedPath)) {
+    const error = new Error(`Redirect loop detected for "${normalizedPath}"`);
+    error.code = 'BRACKETS_NAVIGATION_REDIRECT_LOOP';
+    error.path = normalizedPath;
+    error.chain = [...history, normalizedPath];
+    throw error;
+  }
+
+  const nextChain = [...history, normalizedPath];
+  if (nextChain.length > limit) {
+    const error = new Error(`Redirect chain exceeded ${limit} hops.`);
+    error.code = 'BRACKETS_NAVIGATION_REDIRECT_LIMIT';
+    error.path = normalizedPath;
+    error.chain = nextChain;
+    throw error;
+  }
+
+  return nextChain;
+}
+
+export function formDataToObject(formData) {
+  const output = {};
+
+  if (!formData?.entries) {
+    return output;
+  }
+
+  for (const [key, value] of formData.entries()) {
+    if (!(key in output)) {
+      output[key] = value;
+      continue;
+    }
+
+    output[key] = Array.isArray(output[key])
+      ? [...output[key], value]
+      : [output[key], value];
+  }
+
+  return output;
+}
+
 function normalizeRouteAliases(route) {
   return [
     ...(route.alias ? [route.alias] : []),
@@ -860,18 +944,171 @@ function normalizeRouteAliases(route) {
   ];
 }
 
-function validateRouteParams(route, params) {
-  for (const [name, pattern] of Object.entries(route?.params ?? {})) {
+function prepareRuntimeRoute(route = {}) {
+  const matcher = route.routePattern
+    ? new RegExp(route.routePattern)
+    : buildRouteMatcher(route.route).regex;
+  const paramValidators = Object.fromEntries(Object.entries(route.params ?? {}).flatMap(([name, pattern]) => {
     if (typeof pattern !== 'string' || !pattern) {
+      return [];
+    }
+    return [[name, new RegExp(pattern)]];
+  }));
+
+  return {
+    ...route,
+    _matcher: matcher,
+    _paramValidators: paramValidators
+  };
+}
+
+function appendTargetQuery(searchParams, query) {
+  if (!query) {
+    return;
+  }
+
+  if (query instanceof URLSearchParams || query instanceof FormData) {
+    for (const [key, value] of query.entries()) {
+      if (value !== undefined && value !== null) {
+        searchParams.append(key, String(value));
+      }
+    }
+    return;
+  }
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null) {
       continue;
     }
 
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== undefined && item !== null) {
+          searchParams.append(key, String(item));
+        }
+      }
+      continue;
+    }
+
+    searchParams.append(key, String(value));
+  }
+}
+
+function fillRoutePath(pattern, params = {}) {
+  const normalized = pattern === '/' ? '/' : `/${String(pattern ?? '').replace(/^\/+/, '')}`;
+  const used = new Set();
+  const pathname = normalized.replace(/:([A-Za-z0-9_]+)|\*([A-Za-z0-9_]*)/g, (_, namedKey, splatKey) => {
+    const key = namedKey ?? splatKey ?? 'splat';
+    const value = params[key];
+    if (value === undefined || value === null || value === '') {
+      const error = new Error(`Missing route param "${key}" for "${pattern}"`);
+      error.code = 'BRACKETS_ROUTE_PARAM_MISSING';
+      error.param = key;
+      error.pattern = pattern;
+      throw error;
+    }
+    used.add(key);
+    const encoded = String(value)
+      .split('/')
+      .map((segment) => encodeURIComponent(segment))
+      .join('/');
+    return encoded;
+  });
+
+  return {
+    pathname,
+    usedParams: used
+  };
+}
+
+function findRouteById(routes, id) {
+  const matches = routes.filter((route) => route.id === id);
+  if (!matches.length) {
+    const error = new Error(`Unknown route id "${id}"`);
+    error.code = 'BRACKETS_ROUTE_UNKNOWN';
+    error.routeId = id;
+    throw error;
+  }
+
+  return matches.find((route) => !route.aliasOf) ?? matches[0];
+}
+
+export function buildRouteHref(routes, target, origin = 'http://127.0.0.1') {
+  if (typeof target === 'string' || target instanceof URL) {
+    return createLocationSnapshot(target, origin).path;
+  }
+
+  if (!target || typeof target !== 'object') {
+    const error = new Error('Route target must be a path string, URL, or route target object.');
+    error.code = 'BRACKETS_ROUTE_TARGET_INVALID';
+    throw error;
+  }
+
+  const directPath = target.path ?? target.href ?? target.route ?? null;
+  const selectedRoute = target.id ? findRouteById(routes, target.id) : null;
+  const basePattern = directPath ?? selectedRoute?.route ?? null;
+
+  if (!basePattern) {
+    const error = new Error('Route target requires either "id" or "path".');
+    error.code = 'BRACKETS_ROUTE_TARGET_INVALID';
+    throw error;
+  }
+
+  const nextUrl = new URL(origin);
+  const { pathname } = fillRoutePath(basePattern, target.params ?? {});
+  nextUrl.pathname = pathname;
+  nextUrl.search = '';
+  nextUrl.hash = '';
+  appendTargetQuery(nextUrl.searchParams, target.query ?? null);
+
+  if (target.hash !== undefined && target.hash !== null && target.hash !== '') {
+    nextUrl.hash = String(target.hash).startsWith('#')
+      ? String(target.hash)
+      : `#${String(target.hash)}`;
+  }
+
+  return createLocationSnapshot(nextUrl, origin).path;
+}
+
+function hasExplicitTargetSearch(target) {
+  return Boolean(
+    target
+    && typeof target === 'object'
+    && (Object.hasOwn(target, 'query') || Object.hasOwn(target, 'hash'))
+  );
+}
+
+function isNavigationTargetActive(app, target, options = {}) {
+  const origin = typeof window === 'undefined' ? 'http://127.0.0.1' : window.location.origin;
+  const currentPath = app.lastRouteSnapshot?.location?.path
+    ?? app.current?.location?.path
+    ?? (typeof window === 'undefined'
+      ? app.initialPath
+      : `${window.location.pathname}${window.location.search}${window.location.hash}`);
+  const nextPath = app.resolveNavigationTarget(target);
+  const currentLocation = createLocationSnapshot(currentPath, origin);
+  const nextLocation = createLocationSnapshot(nextPath, origin);
+
+  if (options.exact === false) {
+    return currentLocation.pathname === nextLocation.pathname
+      || currentLocation.pathname.startsWith(`${nextLocation.pathname.replace(/\/+$/, '')}/`);
+  }
+
+  if (!hasExplicitTargetSearch(target)) {
+    return currentLocation.pathname === nextLocation.pathname;
+  }
+
+  return currentLocation.path === nextLocation.path;
+}
+
+function validateRouteParams(route, params) {
+  for (const [name, matcher] of Object.entries(route?._paramValidators ?? {})) {
     const value = params?.[name];
     if (value === undefined) {
       return false;
     }
 
-    if (!new RegExp(pattern).test(String(value))) {
+    if (!matcher.test(String(value))) {
       return false;
     }
   }
@@ -881,11 +1118,18 @@ function validateRouteParams(route, params) {
 
 export class BracketsApp {
   constructor(config) {
-    this.routes = config.routes;
+    this.routes = (config.routes ?? []).map((route) => prepareRuntimeRoute(route));
     this.router = config.router ?? { mode: 'file', logicUrl: null, sources: {}, hooks: {} };
     this.host = config.host ?? readJsonScript('brackets-host', {});
     this.security = config.security ?? { html: 'sanitize' };
     this.sessionState = config.session ?? readJsonScript('brackets-session', { authenticated: false, user: null });
+    this.routesById = new Map();
+    for (const route of this.routes) {
+      if (!route?.id || (this.routesById.has(route.id) && route.aliasOf)) {
+        continue;
+      }
+      this.routesById.set(route.id, route);
+    }
     this.routerLogic = null;
     this.current = null;
     this.layout = null;
@@ -897,8 +1141,11 @@ export class BracketsApp {
     this.routeAssetCache = new Map();
     this.componentCache = new Map();
     this.resourceCache = new Map();
+    this.resourceCacheEpoch = new Map();
+    this.resourceCacheVersion = 0;
     this.pendingFrameworkRender = false;
     this.activeRequests = new Map();
+    this.sessionPromise = null;
     this.routeState = {
       loading: false,
       error: null
@@ -996,14 +1243,42 @@ export class BracketsApp {
 
     const cacheKey = route.id ?? route.route ?? route.htmlUrl;
     if (!this.routeAssetCache.has(cacheKey)) {
-      this.routeAssetCache.set(cacheKey, Promise.all([
+      const pending = Promise.all([
         route.htmlUrl ? this.fetchTextCached(route.htmlUrl) : null,
         route.layoutUrl ? this.fetchTextCached(route.layoutUrl) : null,
         route.logicUrl ? this.importModuleCached(route.logicUrl) : {}
-      ]).catch(() => undefined));
+      ]).catch((error) => {
+        this.routeAssetCache.delete(cacheKey);
+        throw error;
+      });
+      this.routeAssetCache.set(cacheKey, pending);
     }
 
     return this.routeAssetCache.get(cacheKey);
+  }
+
+  shouldWarmRoute(route, currentPath = null) {
+    const activeRoute = this.lastRouteSnapshot?.route ?? this.current?.route ?? null;
+    const activeRouteId = activeRoute?.id ?? null;
+    const activeCanonicalPath = activeRoute
+      ? activeRoute.aliasOf ?? activeRoute.route ?? null
+      : null;
+    const effectiveCurrentPath = currentPath
+      ?? this.lastRouteSnapshot?.location?.pathname
+      ?? (typeof window === 'undefined' ? null : window.location.pathname)
+      ?? null;
+
+    if (effectiveCurrentPath && route.route === effectiveCurrentPath) {
+      return false;
+    }
+    if (activeRouteId && route.id === activeRouteId) {
+      return false;
+    }
+    const candidateCanonicalPath = route.aliasOf ?? route.route ?? null;
+    if (activeCanonicalPath && candidateCanonicalPath === activeCanonicalPath) {
+      return false;
+    }
+    return true;
   }
 
   prefetchPath(nextPath) {
@@ -1017,7 +1292,11 @@ export class BracketsApp {
       return;
     }
 
-    void this.warmRoute(matched.route);
+    if (!this.shouldWarmRoute(matched.route)) {
+      return;
+    }
+
+    void this.warmRoute(matched.route).catch(() => {});
   }
 
   scheduleConfiguredPrefetch() {
@@ -1025,12 +1304,14 @@ export class BracketsApp {
       return;
     }
 
-    const currentPath = createLocationSnapshot(this.initialPath, window.location.origin).pathname;
-    const renderRoutes = this.routes.filter((route) => route.preload === 'render' && route.route !== currentPath);
-    const idleRoutes = this.routes.filter((route) => route.preload === 'idle' && route.route !== currentPath);
+    const currentPath = this.lastRouteSnapshot?.location?.pathname
+      ?? window.location.pathname
+      ?? createLocationSnapshot(this.initialPath, window.location.origin).pathname;
+    const renderRoutes = this.routes.filter((route) => route.preload === 'render' && this.shouldWarmRoute(route, currentPath));
+    const idleRoutes = this.routes.filter((route) => route.preload === 'idle' && this.shouldWarmRoute(route, currentPath));
 
     for (const route of renderRoutes) {
-      void this.warmRoute(route);
+      void this.warmRoute(route).catch(() => {});
     }
 
     if (!idleRoutes.length) {
@@ -1039,7 +1320,7 @@ export class BracketsApp {
 
     const warmIdleRoutes = () => {
       for (const route of idleRoutes) {
-        void this.warmRoute(route);
+        void this.warmRoute(route).catch(() => {});
       }
     };
 
@@ -1053,7 +1334,12 @@ export class BracketsApp {
 
   buildRouteContext(route, params, location) {
     const routeLocation = location ?? createLocationSnapshot(window.location.href, window.location.origin);
+    const app = this;
     return {
+      id: route?.id ?? null,
+      pattern: route?.route ?? null,
+      aliasOf: route?.aliasOf ?? null,
+      aliases: route ? normalizeRouteAliases(route) : [],
       path: routeLocation.path,
       pathname: routeLocation.pathname,
       search: routeLocation.search,
@@ -1076,6 +1362,38 @@ export class BracketsApp {
       },
       query(name) {
         return new URLSearchParams(routeLocation.search).get(name) ?? undefined;
+      },
+      href(next = {}) {
+        if (!route?.id && !route?.route) {
+          return routeLocation.path;
+        }
+
+        const target = {
+          id: route?.id ?? undefined,
+          path: route?.route ?? undefined,
+          params: { ...(params ?? {}), ...(next.params ?? {}) }
+        };
+        if (Object.hasOwn(next, 'query')) {
+          target.query = next.query;
+        }
+        if (Object.hasOwn(next, 'hash')) {
+          target.hash = next.hash;
+        }
+        return app.resolveNavigationTarget(target);
+      },
+      isActive(next = {}) {
+        const target = {
+          id: route?.id ?? undefined,
+          path: route?.route ?? undefined,
+          params: { ...(params ?? {}), ...(next.params ?? {}) }
+        };
+        if (Object.hasOwn(next, 'query')) {
+          target.query = next.query;
+        }
+        if (Object.hasOwn(next, 'hash')) {
+          target.hash = next.hash;
+        }
+        return isNavigationTargetActive(app, target);
       }
     };
   }
@@ -1084,25 +1402,42 @@ export class BracketsApp {
     const from = this.lastRouteSnapshot
       ? {
           route: this.lastRouteSnapshot.route,
-          params: clone(this.lastRouteSnapshot.params ?? {}),
-          location: { ...this.lastRouteSnapshot.location }
+          location: { ...this.lastRouteSnapshot.location },
+          ...this.buildRouteContext(
+            this.lastRouteSnapshot.route,
+            clone(this.lastRouteSnapshot.params ?? {}),
+            this.lastRouteSnapshot.location
+          )
         }
       : null;
+    const toRouteContext = this.buildRouteContext(
+      matched?.route ?? null,
+      clone(matched?.params ?? {}),
+      nextLocation
+    );
 
     return {
       to: {
         route: matched?.route ?? null,
-        params: clone(matched?.params ?? {}),
-        location: { ...nextLocation }
+        location: { ...nextLocation },
+        ...toRouteContext
       },
       from,
       routes: this.routes.map((route) => ({
         id: route.id,
         route: route.route,
+        aliases: normalizeRouteAliases(route),
         title: route.title ?? '',
         source: route.source ?? 'view',
         preload: route.preload ?? null,
-        aliasOf: route.aliasOf ?? null
+        aliasOf: route.aliasOf ?? null,
+        href: (next = {}) => this.resolveNavigationTarget({
+          id: route.id ?? undefined,
+          path: route.route ?? undefined,
+          params: next.params ?? {},
+          ...(Object.hasOwn(next, 'query') ? { query: next.query } : {}),
+          ...(Object.hasOwn(next, 'hash') ? { hash: next.hash } : {})
+        })
       })),
       session: clone(this.sessionState ?? { authenticated: false, user: null }),
       host: clone(this.host ?? {}),
@@ -1136,17 +1471,48 @@ export class BracketsApp {
       return this.sessionState;
     }
 
-    const response = await fetch('/__brackets/session', {
+    if (this.sessionPromise) {
+      return this.sessionPromise;
+    }
+
+    this.sessionPromise = fetch('/__brackets/session', {
       headers: {
         Accept: 'application/json'
       }
-    });
-    this.sessionState = await readJsonResponse(response);
-    return this.sessionState;
+    }).then(async (response) => {
+      const session = await readJsonResponse(response);
+      if (!response.ok) {
+        throw this.createTransportError(response, session);
+      }
+      return session;
+    }).then((session) => {
+        this.sessionState = session;
+        return session;
+      })
+      .finally(() => {
+        this.sessionPromise = null;
+      });
+
+    return this.sessionPromise;
+  }
+
+  async resolveRouteSession(route) {
+    if (!route?.auth?.required) {
+      return this.sessionState;
+    }
+
+    const knownSession = this.sessionState;
+    const shouldRefresh = !knownSession?.authenticated;
+    const session = await this.getSession(shouldRefresh);
+    return session?.authenticated ? session : null;
   }
 
   async cacheFetch(key, loader, options = {}) {
     const normalized = normalizeRequestKey(key) ?? snapshotKey(key);
+    const cacheToken = {
+      version: this.resourceCacheVersion,
+      epoch: this.resourceCacheEpoch.get(normalized) ?? 0
+    };
     const now = Date.now();
     const cached = this.resourceCache.get(normalized);
     const ttlMs = Math.max(0, options.ttlMs ?? 0);
@@ -1158,11 +1524,23 @@ export class BracketsApp {
       return cached.value;
     }
 
-    if (!options.force && isStale && cached.promise) {
-      return cached.value;
+    if (cached?.promise) {
+      if (!options.force && isStale && cached.value !== undefined) {
+        return cached.value;
+      }
+      return cached.promise;
     }
 
+    const nextEntry = {
+      value: cached?.value,
+      updatedAt: cached?.updatedAt ?? 0,
+      promise: null
+    };
+
     const promise = Promise.resolve().then(loader).then((value) => {
+      if (this.resourceCacheVersion !== cacheToken.version || (this.resourceCacheEpoch.get(normalized) ?? 0) !== cacheToken.epoch) {
+        return value;
+      }
       this.resourceCache.set(normalized, {
         value: clone(value),
         updatedAt: Date.now(),
@@ -1170,19 +1548,22 @@ export class BracketsApp {
       });
       return value;
     }).catch((error) => {
+      if (this.resourceCacheVersion !== cacheToken.version || (this.resourceCacheEpoch.get(normalized) ?? 0) !== cacheToken.epoch) {
+        throw error;
+      }
       if (cached) {
-        cached.promise = null;
+        nextEntry.promise = null;
+        nextEntry.value = cached.value;
+        nextEntry.updatedAt = cached.updatedAt;
+        this.resourceCache.set(normalized, nextEntry);
       } else {
         this.resourceCache.delete(normalized);
       }
       throw error;
     });
 
-    this.resourceCache.set(normalized, {
-      value: cached?.value,
-      updatedAt: cached?.updatedAt ?? 0,
-      promise
-    });
+    nextEntry.promise = promise;
+    this.resourceCache.set(normalized, nextEntry);
 
     if (!options.force && isStale && cached) {
       promise.catch(() => {});
@@ -1195,11 +1576,13 @@ export class BracketsApp {
   invalidateCache(key = null) {
     if (key === null || key === undefined) {
       this.resourceCache.clear();
+      this.resourceCacheVersion += 1;
       return;
     }
 
     const normalized = normalizeRequestKey(key) ?? snapshotKey(key);
     this.resourceCache.delete(normalized);
+    this.resourceCacheEpoch.set(normalized, (this.resourceCacheEpoch.get(normalized) ?? 0) + 1);
   }
 
   getRequestEntry(instance, key) {
@@ -1251,6 +1634,34 @@ export class BracketsApp {
     });
   }
 
+  beginTransportState(instance) {
+    instance.transportState ??= {
+      loading: false,
+      error: null,
+      pending: 0,
+      latestRequestId: 0
+    };
+    instance.transportState.pending = Math.max(0, instance.transportState.pending ?? 0) + 1;
+    instance.transportState.latestRequestId = (instance.transportState.latestRequestId ?? 0) + 1;
+    instance.transportState.loading = true;
+    instance.transportState.error = null;
+    return instance.transportState.latestRequestId;
+  }
+
+  finishTransportState(instance, requestId, error = null) {
+    instance.transportState ??= {
+      loading: false,
+      error: null,
+      pending: 0,
+      latestRequestId: 0
+    };
+    instance.transportState.pending = Math.max(0, (instance.transportState.pending ?? 0) - 1);
+    instance.transportState.loading = instance.transportState.pending > 0;
+    if ((instance.transportState.latestRequestId ?? 0) === requestId) {
+      instance.transportState.error = error;
+    }
+  }
+
   inferTransportKey(url, options = {}) {
     return normalizeRequestKey(options.key)
       ?? normalizeRequestKey(options.name)
@@ -1266,12 +1677,17 @@ export class BracketsApp {
   }
 
   resolveFormPayload(options = {}) {
+    if (options.payload instanceof FormData) {
+      return options.payload;
+    }
+
     if (typeof document === 'undefined') {
       return null;
     }
 
     const selector = options.selector ?? null;
-    const form = selector instanceof Element
+    const supportsElement = typeof Element !== 'undefined';
+    const form = supportsElement && selector instanceof Element
       ? selector
       : selector
         ? document.querySelector(selector)
@@ -1283,8 +1699,18 @@ export class BracketsApp {
     const formData = new FormData(form);
     if (options.payload && typeof options.payload === 'object' && !(options.payload instanceof FormData)) {
       for (const [key, value] of Object.entries(options.payload)) {
+        if (Array.isArray(value)) {
+          formData.delete(key);
+          for (const item of value) {
+            if (item !== undefined && item !== null) {
+              formData.append(key, item instanceof Blob ? item : String(item));
+            }
+          }
+          continue;
+        }
+
         if (value !== undefined && value !== null) {
-          formData.set(key, String(value));
+          formData.set(key, value instanceof Blob ? value : String(value));
         }
       }
     }
@@ -1296,11 +1722,16 @@ export class BracketsApp {
       return;
     }
 
-    const entries = payload instanceof URLSearchParams
-      ? payload.entries()
-      : payload instanceof FormData
-        ? payload.entries()
-        : Object.entries(payload);
+    if (payload instanceof URLSearchParams || payload instanceof FormData) {
+      for (const [key, value] of payload.entries()) {
+        if (value !== undefined && value !== null) {
+          requestUrl.searchParams.append(key, String(value));
+        }
+      }
+      return;
+    }
+
+    const entries = Object.entries(payload);
 
     for (const [key, value] of entries) {
       if (value === undefined || value === null) {
@@ -1335,6 +1766,14 @@ export class BracketsApp {
       error.issues = Array.isArray(payload.issues) ? payload.issues : [];
       error.hint = payload.hint ?? null;
     }
+    return error;
+  }
+
+  createSseTransportError(event = null) {
+    const error = new Error('SSE stream failed to connect or stay open.');
+    error.code = 'BRACKETS_SSE_ERROR';
+    error.payload = event;
+    error.hint = 'Check the SSE endpoint, same-origin host path, and network availability.';
     return error;
   }
 
@@ -1486,14 +1925,17 @@ export class BracketsApp {
   createNavHelpers() {
     const app = this;
     return {
-      to(pathname, nextOptions = {}) {
-        return app.navigate(pathname, nextOptions);
+      to(target, nextOptions = {}) {
+        return app.navigate(app.resolveNavigationTarget(target), nextOptions);
       },
-      replace(pathname, nextOptions = {}) {
-        return app.navigate(pathname, { ...nextOptions, replace: true });
+      replace(target, nextOptions = {}) {
+        return app.navigate(app.resolveNavigationTarget(target), { ...nextOptions, replace: true });
       },
       back() {
         history.back();
+      },
+      forward() {
+        history.forward?.();
       },
       reload(nextOptions = {}) {
         return app.navigate(window.location.pathname + window.location.search + window.location.hash, {
@@ -1501,14 +1943,25 @@ export class BracketsApp {
           replace: true
         });
       },
-      redirect(pathname, nextOptions = {}) {
-        return app.navigate(pathname, { ...nextOptions, replace: true });
+      redirect(target, nextOptions = {}) {
+        return app.navigate(app.resolveNavigationTarget(target), { ...nextOptions, replace: true });
       },
       notFound(nextOptions = {}) {
         return app.renderNotFound(createLocationSnapshot(window.location.pathname + window.location.search + window.location.hash, window.location.origin), nextOptions);
       },
-      prefetch(pathname) {
-        return app.prefetchPath(pathname);
+      prefetch(target) {
+        return app.prefetchPath(app.resolveNavigationTarget(target));
+      },
+      href(target) {
+        return app.resolveNavigationTarget(target);
+      },
+      isActive(target, options = {}) {
+        return isNavigationTargetActive(app, target, options);
+      },
+      match(target) {
+        const nextPath = app.resolveNavigationTarget(target);
+        const nextLocation = createLocationSnapshot(nextPath, window.location.origin);
+        return app.matchRoute(nextLocation.pathname);
       },
       download(pathname, filename = null) {
         if (typeof window === 'undefined') {
@@ -1523,6 +1976,14 @@ export class BracketsApp {
         window.location.assign(url.href);
       }
     };
+  }
+
+  resolveNavigationTarget(target) {
+    return buildRouteHref(
+      this.routes,
+      target,
+      typeof window === 'undefined' ? 'http://127.0.0.1' : window.location.origin
+    );
   }
 
   createCtx(instance) {
@@ -1579,7 +2040,7 @@ export class BracketsApp {
             return target.value ?? null;
           }
 
-          return Object.fromEntries(new FormData(form).entries());
+          return formDataToObject(new FormData(form));
         },
         formData() {
           const target = this.el;
@@ -1797,10 +2258,7 @@ export class BracketsApp {
 
   matchRoute(pathname) {
     for (const route of this.routes) {
-      const matcher = route.routePattern
-        ? new RegExp(route.routePattern)
-        : buildRouteMatcher(route.route).regex;
-      const match = pathname.match(matcher);
+      const match = pathname.match(route._matcher ?? buildRouteMatcher(route.route).regex);
       if (match) {
         const params = route.routeKeys?.length
           ? extractRouteParams(route.routeKeys, match)
@@ -2067,13 +2525,42 @@ export class BracketsApp {
 
     const requestKey = this.inferTransportKey(url, options);
     let request = null;
-    instance.transportState.loading = true;
-    instance.transportState.error = null;
+    const transportRequestId = this.beginTransportState(instance);
+    let transportFinished = false;
+    const completeTransport = (error = null) => {
+      if (transportFinished) {
+        return;
+      }
+      transportFinished = true;
+      this.finishTransportState(instance, transportRequestId, error);
+    };
+    let requestFinished = false;
+    const completeRequest = (error = null) => {
+      if (requestFinished) {
+        return;
+      }
+      requestFinished = true;
+      this.finishRequest(instance, requestKey, error);
+    };
     this.beginRequest(instance, requestKey);
     this.scheduleFrameworkRender(instance);
 
     if (resultMode === 'sse') {
+      if (typeof EventSource !== 'function') {
+        const error = new Error('EventSource is not available in this environment.');
+        error.code = 'BRACKETS_SSE_UNAVAILABLE';
+        completeTransport(error);
+        completeRequest(error);
+        this.scheduleFrameworkRender(instance);
+        throw error;
+      }
+
       const source = new EventSource(this.createEventStreamUrl(url, payload, options));
+      source.addEventListener('open', () => {
+        completeTransport(null);
+        completeRequest(null);
+        this.scheduleFrameworkRender(instance);
+      });
       source.addEventListener('datastar-patch-signals', (event) => {
         try {
           this.patchSignals(JSON.parse(event.data));
@@ -2085,13 +2572,11 @@ export class BracketsApp {
         patchDomFromHtml(event.data);
       });
       source.addEventListener('error', (event) => {
-        instance.transportState.error = event;
-        this.finishRequest(instance, requestKey, event);
+        const error = this.createSseTransportError(event);
+        completeTransport(error);
+        completeRequest(error);
         this.scheduleFrameworkRender(instance);
       });
-      instance.transportState.loading = false;
-      this.finishRequest(instance, requestKey, null);
-      this.scheduleFrameworkRender(instance);
       return source;
     }
 
@@ -2126,16 +2611,19 @@ export class BracketsApp {
       return nextValue;
     } catch (error) {
       if (error?.name === 'AbortError') {
-        this.finishRequest(instance, requestKey, null);
+        completeTransport(null);
+        completeRequest(null);
         return undefined;
       }
-      instance.transportState.error = error;
-      this.finishRequest(instance, requestKey, error);
+      completeTransport(error);
+      completeRequest(error);
       throw error;
     } finally {
-      instance.transportState.loading = false;
-      if (!instance.transportState.error) {
-        this.finishRequest(instance, requestKey, null);
+      if (!transportFinished) {
+        completeTransport(instance.transportState.error ?? null);
+      }
+      if (!requestFinished) {
+        completeRequest(instance.transportState.error ?? null);
       }
       if (requestKey && request?.controller && this.activeRequests.get(requestKey) === request.controller) {
         this.activeRequests.delete(requestKey);
@@ -2378,35 +2866,49 @@ export class BracketsApp {
 
       if (beforeDecision && beforeDecision.path !== nextLocation.path) {
         this.routeState.loading = false;
-        await this.navigate(beforeDecision.path, { replace: beforeDecision.replace });
+        await this.navigate(beforeDecision.path, {
+          replace: beforeDecision.replace,
+          _redirectChain: extendNavigationRedirectChain(options._redirectChain ?? [nextLocation.path], beforeDecision.path, window.location.origin)
+        });
         return;
       }
 
       if (!matched) {
-        this.updateHistory(nextLocation, options);
         const notFoundResult = await this.runRouterHook('notFound', nextLocation, null);
-        const redirect = normalizeRouterRedirect(notFoundResult);
-        if (redirect && redirect.path !== nextLocation.path) {
+        const notFoundOutcome = resolveNotFoundResult(notFoundResult, nextLocation.path, window.location.origin);
+        if (notFoundOutcome.kind === 'redirect') {
           this.routeState.loading = false;
-          await this.navigate(redirect.path, { replace: redirect.replace });
+          await this.navigate(notFoundOutcome.redirect.path, {
+            replace: notFoundOutcome.redirect.replace,
+            _redirectChain: extendNavigationRedirectChain(options._redirectChain ?? [nextLocation.path], notFoundOutcome.redirect.path, window.location.origin)
+          });
           return;
         }
 
-        if (notFoundResult && typeof notFoundResult === 'object' && typeof notFoundResult.html === 'string') {
+        if (notFoundOutcome.updateHistory) {
+          this.updateHistory(nextLocation, options);
+        }
+
+        if (notFoundOutcome.kind === 'html') {
           await this.disposeCurrent();
-          root.innerHTML = this.renderHtmlContent(notFoundResult.html);
+          root.innerHTML = this.renderHtmlContent(notFoundOutcome.result.html);
           this.lastRouteSnapshot = {
             route: null,
             params: {},
             location: nextLocation
           };
           this.applyDocumentMetadata({
-            title: notFoundResult.title ?? 'Not Found',
-            meta: { description: notFoundResult.description ?? 'Route not found' },
+            title: notFoundOutcome.result.title ?? 'Not Found',
+            meta: { description: notFoundOutcome.result.description ?? 'Route not found' },
             seo: { index: false }
+          });
+          this.emitDebugEvent('route-not-found', {
+            path: nextLocation.path,
+            custom: true
           });
           this.routeState.loading = false;
           this.scheduleFrameworkRender(this.current);
+          this.scrollAfterNavigation(nextLocation, options);
           return;
         }
 
@@ -2419,15 +2921,22 @@ export class BracketsApp {
       const route = matched.route;
       if (route.redirectTo) {
         this.routeState.loading = false;
-        await this.nav.redirect(route.redirectTo, { replace: true });
+        await this.nav.redirect(route.redirectTo, {
+          replace: true,
+          _redirectChain: extendNavigationRedirectChain(options._redirectChain ?? [nextLocation.path], route.redirectTo, window.location.origin)
+        });
         return;
       }
 
       if (route.auth?.required) {
-        const session = await this.getSession();
-        if (!session?.authenticated) {
+        const session = await this.resolveRouteSession(route);
+        if (!session) {
           this.routeState.loading = false;
-          await this.nav.redirect(route.auth.redirectTo ?? '/login', { replace: true });
+          const redirectPath = route.auth.redirectTo ?? '/login';
+          await this.nav.redirect(redirectPath, {
+            replace: true,
+            _redirectChain: extendNavigationRedirectChain(options._redirectChain ?? [nextLocation.path], redirectPath, window.location.origin)
+          });
           return;
         }
       }
@@ -2456,6 +2965,7 @@ export class BracketsApp {
         await this.runRouterHook('afterEach', nextLocation, matched);
         this.scheduleFrameworkRender(this.current);
         this.routeState.loading = false;
+        this.scheduleConfiguredPrefetch();
         this.emitDebugEvent('route-sync', {
           id: route.id,
           path: nextLocation.path
@@ -2528,7 +3038,9 @@ export class BracketsApp {
         cleanups: [],
         transportState: {
           loading: false,
-          error: null
+          error: null,
+          pending: 0,
+          latestRequestId: 0
         },
         requestState: {}
       };
@@ -2565,6 +3077,7 @@ export class BracketsApp {
 
       await this.runRouterHook('afterEach', nextLocation, matched);
       this.routeState.loading = false;
+      this.scheduleConfiguredPrefetch();
       this.emitDebugEvent('route-mounted', {
         id: route.id,
         path: nextLocation.path

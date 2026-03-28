@@ -31,7 +31,7 @@ This is the compact reference shape the project should stay aligned with.
 | `.view` | what page exists |
 | `.logic` | how the app behaves |
 | `.api` | how the app talks to a backend |
-| `.data` | how the app talks to local storage/data files |
+| `.data` | how the app defines and talks to local models, storage, and persistence rules |
 | `.html` | actual markup/templates/pages/layouts/components |
 | `.json` | simple structured storage |
 | `.yaml` | human-editable config/content storage |
@@ -73,6 +73,7 @@ Additive router powers that do not change Brackets syntax:
 - `params` for param validation rules
 - `preload` for route warming hints such as `render` and `idle`
 - CLI route generation with `routes --generate` for apps that want Brackets to inspect `.html` files and create missing `.view` files automatically
+- route-target helpers so navigation can use route ids plus params/query/hash instead of raw strings
 
 ### Page manifest
 
@@ -104,6 +105,9 @@ Instead, important framework contracts are validated at runtime:
 
 - `page()` manifests
 - `config/brackets.yaml` / `config/brackets.json`
+- `.logic` module exports
+- `.api` and `.data` module exports
+- `router.logic` and `/routes/*.logic`
 - RPC payloads for `.api` and `.data`
 
 Structured framework errors should prefer:
@@ -123,7 +127,7 @@ This keeps no-build authoring simple while still making bad shapes fail early an
 | `state` | local state reads and writes |
 | `action` | current event, element, and input payload |
 | `api` | backend transport modules |
-| `data` | local persistence modules |
+| `data` | local model and persistence modules |
 | `nav` | navigation helpers |
 | `cache` | cache/prefetch/revalidation helpers |
 | `auth` | session and CSRF helpers |
@@ -134,10 +138,16 @@ Common helper surface inside grouped context:
 - `ctx.action.input()` reads the current control or current form payload
 - `ctx.action.formData()` returns raw multipart-friendly `FormData` for upload flows
 - `ctx.action.files(name?)` returns selected files from the active input or form
-- `ctx.nav.prefetch(path)` warms the next route
+- `ctx.nav.to(target)`, `ctx.nav.replace(target)`, and `ctx.nav.redirect(target)` accept either a path string or a route target object
+- `ctx.nav.href(target)` builds a stable href from that same target shape
+- `ctx.nav.isActive(target)` and `ctx.nav.match(target)` keep active-route checks readable
+- `ctx.nav.forward()` mirrors `history.forward()` without breaking the Brackets helper surface
+- `ctx.route.href(next?)` builds a new href from the current route id and params
+- `ctx.nav.prefetch(target)` warms the next route
 - `ctx.nav.download(path, filename?)` triggers a normal download without inventing a separate client API
 - `ctx.cache.fetch(...)`, `ctx.cache.refresh(...)`, and `ctx.cache.invalidate(...)` manage Brackets cache state
 - `ctx.auth.session()` and `ctx.auth.refresh()` expose session state
+- router hook contexts should expose the same route-aware helpers through `ctx.to`, `ctx.from`, and `ctx.routes`
 
 ### Lifecycle
 
@@ -219,7 +229,19 @@ Notes:
 | mock/demo data | `.json` |
 | editable config/content | `.yaml` |
 | durable local database | `.db` |
-| framework local-data adapter | `.data` |
+| framework local-data adapter and model layer | `.data` |
+
+Datastar transfer rule:
+
+- `.data` remains the local-first model layer
+- `.api` remains the remote/shared-authority layer
+- both should preserve Datastar-compatible SSE and HTTP transfer when they move data
+- Brackets should not invent a separate transport model below them
+
+Optional host capability:
+
+- `storage['[e]json'](...)` for encrypted JSON at rest
+- `storage['[e]yaml'](...)` for encrypted YAML at rest
 
 ### Async/data UX
 
@@ -238,6 +260,8 @@ Notes:
 |---|---|
 | `security.html: sanitize` | sanitize `:html` output before insertion |
 | `security.html: trusted` | allow raw `:html` output for intentionally trusted content |
+| `security.storage.keyEnv` | host environment variable that provides the encrypted storage key |
+| `security.storage.pbkdf2Iterations` | host-side key stretching cost for encrypted local persistence |
 
 ### Website/export/runtime contracts
 
@@ -258,7 +282,7 @@ Notes:
 3. Keep markup in `.html`.
 4. Keep routing in `.logic`, not `.api`.
 5. Keep `.api` strictly about remote/backend transport.
-6. Keep `.data` strictly about local persistence/storage access.
+6. Keep `.data` strictly about the local model layer, persistence rules, and storage access.
 7. Ship the tiny local server early because it unlocks the rest of the design cleanly.
 8. Use import maps for framework modules.
 9. Keep JS flat and normal.
@@ -306,8 +330,9 @@ That means Brackets syntax should compile to Datastar-native behavior whenever D
 Brackets is also backend agnostic by design:
 
 - `.api` is the contract for remote/backend transport
-- `.data` is the contract for local persistence and storage adapters
+- `.data` is the contract for the local model layer, persistence rules, queries, and storage adapters
 - `.json`, `.yaml`, and `.db` are storage formats the local side can use without changing the frontend language
+- both `.data` and `.api` should preserve Datastar-compatible HTTP and SSE transfer semantics when data crosses into the live UI
 
 Brackets also does not need a framework-owned plugin API.
 
@@ -553,6 +578,7 @@ Important split:
 - `.api` is not routing
 - `.api` is not local file persistence
 - `.data` is not remote transport
+- `.data` should own most model logic when it can
 - `.logic` is where routing belongs
 
 ### Local storage formats
@@ -701,6 +727,9 @@ This is the practical "work with Datastar, not around Datastar" table.
 Harmony rule:
 
 - authored `@event` syntax should always land on Datastar's `data-on:*` event system, including simple named actions such as `@click="refresh"`
+- the current native Datastar coverage should include `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, `:set.*`, and plain transport/event expressions
+- simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
+- simple `read("/events")` expressions in transformed markup should compile toward Datastar-native request behavior when possible
 
 Items that are Brackets-first rather than Datastar-native:
 

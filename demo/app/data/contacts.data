@@ -1,9 +1,49 @@
 ({
+  normalizeSource(value) {
+    const input = String(value ?? '').trim()
+    return input || 'desktop'
+  },
+
+  normalizeName(value) {
+    return String(value ?? '').trim()
+  },
+
+  normalizeRecord(record) {
+    return {
+      id: Number(record?.id) || Date.now(),
+      name: this.normalizeName(record?.name),
+      source: this.normalizeSource(record?.source)
+    }
+  },
+
+  isValidRecord(record) {
+    return Boolean(record.name)
+  },
+
   async list({ storage }) {
-    return storage.json('@storage/contacts.json').read()
+    const records = await storage.json('@storage/contacts.json').read([])
+    return records
+      .map((record) => this.normalizeRecord(record))
+      .filter((record) => this.isValidRecord(record))
+  },
+
+  async add({ storage }, input) {
+    const nextRecord = this.normalizeRecord(input)
+    if (!this.isValidRecord(nextRecord)) {
+      return this.list({ storage })
+    }
+
+    const records = await this.list({ storage })
+    const next = [...records, nextRecord]
+    await storage.json('@storage/contacts.json').write(next)
+    return next
   },
 
   async save({ storage }, records) {
-    return storage.json('@storage/contacts.json').write(records)
+    const next = (records ?? [])
+      .map((record) => this.normalizeRecord(record))
+      .filter((record) => this.isValidRecord(record))
+    await storage.json('@storage/contacts.json').write(next)
+    return next
   }
 })

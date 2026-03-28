@@ -5,7 +5,12 @@ import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { findBracketsConfigFile, loadBracketsConfig } from './config.js';
-import { BracketsContractError } from './contracts.js';
+import {
+  BracketsContractError,
+  validateLogicModuleContract,
+  validateRouterModuleContract,
+  validateRpcModuleContract
+} from './contracts.js';
 import { validatePageManifest } from './page.js';
 import { createServer } from './server.js';
 import { transformHtmlSyntax } from './syntax.js';
@@ -28,6 +33,17 @@ const ROUTE_GENERATION_EXCLUDE_DIRS = new Set([
   'routes'
 ]);
 const ROUTE_STRIP_PREFIXES = ['pages/', 'views/', 'screens/'];
+const SPECIFIER_ALIASES = {
+  '@views/': 'views/',
+  '@routes/': 'routes/',
+  '@logic/': 'logic/',
+  '@api/': 'api/',
+  '@data/': 'data/',
+  '@pages/': 'pages/',
+  '@layouts/': 'layouts/',
+  '@components/': 'components/',
+  '@storage/': 'storage/'
+};
 
 function toModuleSource(source, extension) {
   const trimmed = source.trim();
@@ -75,8 +91,12 @@ function locateLineForIssuePath(source, issuePath, fallback = 1) {
   }
 
   const searchToken = tokens.at(-1);
-  const fieldPattern = new RegExp(`["']?${searchToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']?\\s*:`, 'g');
-  const matches = [...source.matchAll(fieldPattern)];
+  const escapedToken = searchToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`["']?${escapedToken}["']?\\s*:`, 'g'),
+    new RegExp(`(?:^|[\\s,{])(?:async\\s+)?${escapedToken}\\s*\\(`, 'gm')
+  ];
+  const matches = patterns.flatMap((pattern) => [...source.matchAll(pattern)]);
   if (!matches.length) {
     return fallback;
   }
@@ -113,6 +133,352 @@ function createDiagnostic({ file, line = 1, column = 1, code = 'BRACKETS_CHECK',
     issue,
     hint
   };
+}
+
+function lineFromPattern(source, pattern, fallback = 1) {
+  const match = pattern.exec(source);
+  if (!match || match.index === undefined) {
+    return fallback;
+  }
+  return lineFromIndex(source, match.index);
+}
+
+function resolveCheckSpecifier(specifier, appRoot, baseDir = appRoot) {
+  if (typeof specifier !== 'string' || !specifier.trim()) {
+    return null;
+  }
+
+  const normalizedRoot = path.resolve(appRoot);
+  const describe = (resolvedPath) => {
+    const normalizedPath = path.resolve(resolvedPath);
+    return {
+      path: normalizedPath,
+      outsideRoot: normalizedPath !== normalizedRoot && !normalizedPath.startsWith(`${normalizedRoot}${path.sep}`)
+    };
+  };
+
+  for (const [alias, target] of Object.entries(SPECIFIER_ALIASES)) {
+    if (specifier.startsWith(alias)) {
+      return describe(path.join(appRoot, target, specifier.slice(alias.length)));
+    }
+  }
+
+  if (specifier.startsWith('/app/')) {
+    return describe(path.join(appRoot, specifier.slice('/app/'.length).split('/').join(path.sep)));
+  }
+
+  return describe(path.resolve(baseDir, specifier));
+}
+
+function collectArchitectureDiagnostics(filePath, source, kind) {
+  const diagnostics = [];
+  const rules = {
+    logic: [
+      {
+        pattern: /\bstorage\.(json|yaml|db|ejson|eyaml|secureJson|secureYaml)\s*\(/,
+        message: '.logic should call local persistence through `.data`, not through direct storage helpers.',
+        hint: 'Move persistence rules into a `.data` module and call it from `.logic` through ctx.data.'
+      },
+      {
+        pattern: /\bfetch\s*\(|\bhttp\.(client|resource|openapi|request|get|post|put|patch|delete|read)\s*\(/,
+        message: '.logic should use `.api` for remote/backend transport instead of reaching for transport directly.',
+        hint: 'Move remote calls into a `.api` module and call it from `.logic` through ctx.api.'
+      }
+    ],
+    api: [
+      {
+        pattern: /\bstorage\.(json|yaml|db|ejson|eyaml|secureJson|secureYaml)\s*\(/,
+        message: '.api should stay remote/backend-facing and should not own local persistence.',
+        hint: 'Move local file or database access into a `.data` module.'
+      }
+    ],
+    data: [
+      {
+        pattern: /\bfetch\s*\(|\bhttp\.(client|resource|openapi|request|get|post|put|patch|delete|read)\s*\(/,
+        message: '.data should stay local-first and should not own remote/backend transport.',
+        hint: 'Move remote sync or backend access into a `.api` module.'
+      }
+    ]
+  };
+
+  for (const rule of rules[kind] ?? []) {
+    if (!rule.pattern.test(source)) {
+      continue;
+    }
+
+    diagnostics.push(createDiagnostic({
+      file: filePath,
+      line: lineFromPattern(source, rule.pattern),
+      code: 'BRACKETS_ARCHITECTURE_INVALID',
+      message: rule.message,
+      hint: rule.hint
+    }));
+  }
+
+  return diagnostics;
+}
+
+function normalizeRoutePathForCheck(route) {
+  if (!route || route === '/') {
+    return '/';
+  }
+
+  const normalized = route.startsWith('/') ? route : `/${route}`;
+  return normalized.length > 1
+    ? normalized.replace(/\/+$/, '')
+    : normalized;
+}
+
+function normalizeAliasValues(definition = {}) {
+  return [...new Set([
+    ...(typeof definition.alias === 'string' ? [definition.alias] : []),
+    ...(Array.isArray(definition.aliases) ? definition.aliases : [])
+  ].filter((value) => typeof value === 'string' && value.trim()).map((value) => normalizeRoutePathForCheck(value)))];
+}
+
+function buildRouteEntry(filePath, definition, appRoot, kind) {
+  const viewsDir = path.join(appRoot, 'views');
+  const routesDir = path.join(appRoot, 'routes');
+  const relativePath = path.relative(appRoot, filePath);
+  const defaultRouteRoot = kind === 'view'
+    ? (filePath.startsWith(viewsDir) ? viewsDir : appRoot)
+    : (relativePath === 'router.logic' ? null : routesDir);
+  const route = normalizeRoutePathForCheck(
+    definition.route ?? (defaultRouteRoot ? deriveRouteFromFile(filePath, defaultRouteRoot) : '/')
+  );
+
+  return {
+    filePath,
+    id: definition.id,
+    route,
+    aliases: normalizeAliasValues(definition),
+    redirectTo: typeof definition.redirectTo === 'string' && definition.redirectTo.trim()
+      ? normalizeRoutePathForCheck(definition.redirectTo)
+      : null
+  };
+}
+
+function collectRouteIdentityDiagnostics(entries, sources) {
+  const diagnostics = [];
+  const ids = new Map();
+  const routes = new Map();
+
+  for (const entry of entries) {
+    if (typeof entry.id === 'string' && entry.id.trim()) {
+      const bucket = ids.get(entry.id) ?? [];
+      bucket.push(entry);
+      ids.set(entry.id, bucket);
+    }
+
+    const routeKeys = [entry.route, ...entry.aliases];
+    for (const routeKey of routeKeys) {
+      const bucket = routes.get(routeKey) ?? [];
+      bucket.push(entry);
+      routes.set(routeKey, bucket);
+    }
+  }
+
+  for (const [id, bucket] of ids) {
+    if (bucket.length < 2) {
+      continue;
+    }
+
+    for (const entry of bucket) {
+      const source = sources.get(entry.filePath) ?? '';
+      diagnostics.push(createDiagnostic({
+        file: entry.filePath,
+        line: locateLineForIssuePath(source, `${entry.filePath}.id`),
+        code: 'BRACKETS_ROUTE_ID_CONFLICT',
+        message: `Route id "${id}" is declared more than once.`,
+        hint: 'Give each page or route definition a stable unique id.'
+      }));
+    }
+  }
+
+  for (const [routeKey, bucket] of routes) {
+    if (bucket.length < 2) {
+      continue;
+    }
+
+    const uniqueFiles = new Set(bucket.map((entry) => `${entry.filePath}:${entry.route}:${entry.aliases.join('|')}`));
+    if (uniqueFiles.size < 2) {
+      continue;
+    }
+
+    for (const entry of bucket) {
+      const source = sources.get(entry.filePath) ?? '';
+      diagnostics.push(createDiagnostic({
+        file: entry.filePath,
+        line: locateLineForIssuePath(source, `${entry.filePath}.route`),
+        code: 'BRACKETS_ROUTE_CONFLICT',
+        message: `Route path "${routeKey}" is declared more than once.`,
+        hint: 'Use unique routes and aliases so one path maps to one page definition.'
+      }));
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.redirectTo) {
+      continue;
+    }
+
+    if (![entry.route, ...entry.aliases].includes(entry.redirectTo)) {
+      continue;
+    }
+
+    const source = sources.get(entry.filePath) ?? '';
+    diagnostics.push(createDiagnostic({
+      file: entry.filePath,
+      line: locateLineForIssuePath(source, `${entry.filePath}.redirectTo`),
+      code: 'BRACKETS_ROUTE_REDIRECT_LOOP',
+      message: `Route "${entry.route}" redirects back to "${entry.redirectTo}".`,
+      hint: 'Redirect routes should point to a different destination path to avoid navigation loops.'
+    }));
+  }
+
+  const redirectGraph = new Map();
+  const redirectOwners = new Map();
+  for (const entry of entries) {
+    if (!entry.redirectTo) {
+      continue;
+    }
+
+    for (const sourcePath of [entry.route, ...entry.aliases]) {
+      redirectGraph.set(sourcePath, entry.redirectTo);
+      redirectOwners.set(sourcePath, entry);
+    }
+  }
+
+  const cycleNodes = new Set();
+  for (const start of redirectGraph.keys()) {
+    if (cycleNodes.has(start)) {
+      continue;
+    }
+
+    const pathIndex = new Map();
+    const chain = [];
+    let current = start;
+
+    while (current && redirectGraph.has(current)) {
+      if (pathIndex.has(current)) {
+        for (const node of chain.slice(pathIndex.get(current))) {
+          cycleNodes.add(node);
+        }
+        break;
+      }
+
+      if (cycleNodes.has(current)) {
+        break;
+      }
+
+      pathIndex.set(current, chain.length);
+      chain.push(current);
+      current = redirectGraph.get(current);
+    }
+  }
+
+  const reportedLoops = new Set();
+  for (const node of cycleNodes) {
+    const entry = redirectOwners.get(node);
+    if (!entry) {
+      continue;
+    }
+
+    const reportKey = `${entry.filePath}:${entry.route}:${entry.redirectTo}`;
+    if (reportedLoops.has(reportKey)) {
+      continue;
+    }
+    reportedLoops.add(reportKey);
+
+    const source = sources.get(entry.filePath) ?? '';
+    diagnostics.push(createDiagnostic({
+      file: entry.filePath,
+      line: locateLineForIssuePath(source, `${entry.filePath}.redirectTo`),
+      code: 'BRACKETS_ROUTE_REDIRECT_LOOP',
+      message: `Route "${entry.route}" participates in a redirect loop through "${entry.redirectTo}".`,
+      hint: 'Redirect routes should end at a non-redirect destination path instead of cycling between routes.'
+    }));
+  }
+
+  return diagnostics;
+}
+
+function collectManifestReferenceDiagnostics(filePath, definition, appRoot, source) {
+  const diagnostics = [];
+  const baseDir = path.dirname(filePath);
+
+  const requiredRefs = [
+    ['html', definition.html],
+    ['logic', definition.logic],
+    ['layout', definition.layout]
+  ];
+
+  for (const [field, specifier] of requiredRefs) {
+    if (!specifier) {
+      continue;
+    }
+
+    const resolved = resolveCheckSpecifier(specifier, appRoot, baseDir);
+    if (!resolved) {
+      continue;
+    }
+
+    if (resolved.outsideRoot) {
+      diagnostics.push(createDiagnostic({
+        file: filePath,
+        line: locateLineForIssuePath(source, `${filePath}.${field}`),
+        code: 'BRACKETS_REFERENCE_OUTSIDE_APP',
+        message: `${field} reference "${specifier}" points outside the app root.`,
+        hint: `Keep ${field} references inside the app folder.`
+      }));
+      continue;
+    }
+
+    if (!existsSync(resolved.path)) {
+      diagnostics.push(createDiagnostic({
+        file: filePath,
+        line: locateLineForIssuePath(source, `${filePath}.${field}`),
+        code: 'BRACKETS_REFERENCE_MISSING',
+        message: `Missing ${field} reference "${specifier}".`,
+        hint: `Create the referenced ${field} file or update the ${field} specifier.`
+      }));
+    }
+  }
+
+  for (const [group, entries] of Object.entries({
+    api: definition.api ?? {},
+    data: definition.data ?? {}
+  })) {
+    for (const [name, specifier] of Object.entries(entries)) {
+      const resolved = resolveCheckSpecifier(specifier, appRoot, baseDir);
+      if (!resolved) {
+        continue;
+      }
+
+      if (resolved.outsideRoot) {
+        diagnostics.push(createDiagnostic({
+          file: filePath,
+          line: locateLineForIssuePath(source, `${filePath}.${group}.${name}`),
+          code: 'BRACKETS_REFERENCE_OUTSIDE_APP',
+          message: `${group} dependency "${name}" points outside the app root: "${specifier}".`,
+          hint: `Keep ${group}.${name} inside the app folder.`
+        }));
+        continue;
+      }
+
+      if (!existsSync(resolved.path)) {
+        diagnostics.push(createDiagnostic({
+          file: filePath,
+          line: locateLineForIssuePath(source, `${filePath}.${group}.${name}`),
+          code: 'BRACKETS_REFERENCE_MISSING',
+          message: `Missing ${group} dependency "${name}" at "${specifier}".`,
+          hint: `Create the referenced ${group} file or update the ${group}.${name} specifier.`
+        }));
+      }
+    }
+  }
+
+  return diagnostics;
 }
 
 function diagnosticsFromContractError(error, filePath, source) {
@@ -492,6 +858,20 @@ export async function validateApp(appRoot) {
     const issues = [];
     const warnings = [];
     const routesPayload = await fetch(`${instance.url}/config/brackets.json`).then((response) => response.json());
+    const canonicalRoutes = routesPayload.routes.filter((route) => !route.aliasOf);
+    const seenIds = new Map();
+    const seenPaths = new Map();
+
+    for (const route of canonicalRoutes) {
+      if (route.id) {
+        const bucket = seenIds.get(route.id) ?? [];
+        bucket.push(route.route);
+        seenIds.set(route.id, bucket);
+      }
+      const bucket = seenPaths.get(route.route) ?? [];
+      bucket.push(route.id ?? route.sourceUrl ?? route.route);
+      seenPaths.set(route.route, bucket);
+    }
 
     for (const route of routesPayload.routes) {
       const htmlResponse = await fetch(`${instance.url}${route.htmlUrl}`);
@@ -522,6 +902,18 @@ export async function validateApp(appRoot) {
       }
     }
 
+    for (const [id, routes] of seenIds) {
+      if (routes.length > 1) {
+        issues.push(`Duplicate route id "${id}" was found across multiple canonical routes.`);
+      }
+    }
+
+    for (const [routePath, owners] of seenPaths) {
+      if (owners.length > 1) {
+        issues.push(`Duplicate canonical route path "${routePath}" was found across multiple pages.`);
+      }
+    }
+
     return {
       ok: issues.length === 0,
       issues,
@@ -539,6 +931,8 @@ export async function checkTypes(appRoot) {
   const resolvedAppRoot = path.resolve(appRoot);
   const diagnostics = [];
   let filesChecked = 0;
+  const routeEntries = [];
+  const routeSources = new Map();
 
   const configFile = findBracketsConfigFile(resolvedAppRoot);
   if (configFile) {
@@ -554,40 +948,105 @@ export async function checkTypes(appRoot) {
   const frameworkFiles = await listFilesRecursive(resolvedAppRoot, '.view', {
     excludeDirs: new Set(['node_modules', '.git', 'framework', 'config', 'tests'])
   });
-  const routerLogicPath = path.join(resolvedAppRoot, 'router.logic');
-  const groupedRouteFiles = await listFilesRecursive(path.join(resolvedAppRoot, 'routes'), '.logic', {
-    excludeDirs: new Set(['node_modules', '.git'])
+  const logicFiles = await listFilesRecursive(resolvedAppRoot, '.logic', {
+    excludeDirs: new Set(['node_modules', '.git', 'framework', 'config', 'tests'])
   });
+  const apiFiles = await listFilesRecursive(resolvedAppRoot, '.api', {
+    excludeDirs: new Set(['node_modules', '.git', 'framework', 'config', 'tests'])
+  });
+  const dataFiles = await listFilesRecursive(resolvedAppRoot, '.data', {
+    excludeDirs: new Set(['node_modules', '.git', 'framework', 'config', 'tests'])
+  });
+  const routeLogicFiles = [];
+  const appLogicFiles = [];
+
+  for (const filePath of logicFiles) {
+    const relativePath = path.relative(resolvedAppRoot, filePath);
+    const routePrefix = `routes${path.sep}`;
+    if (relativePath === 'router.logic' || relativePath.startsWith(routePrefix)) {
+      routeLogicFiles.push(filePath);
+    } else {
+      appLogicFiles.push(filePath);
+    }
+  }
 
   for (const filePath of frameworkFiles) {
     filesChecked += 1;
     const source = await readFile(filePath, 'utf8');
+    routeSources.set(filePath, source);
     try {
       const exported = await loadDefaultExport(filePath);
       validatePageManifest(exported, `page manifest ${filePath}`);
+      routeEntries.push(buildRouteEntry(filePath, exported, resolvedAppRoot, 'view'));
+      diagnostics.push(...collectManifestReferenceDiagnostics(filePath, exported, resolvedAppRoot, source));
     } catch (error) {
       diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
     }
   }
 
-  const routeLogicFiles = [
-    ...(existsSync(routerLogicPath) ? [routerLogicPath] : []),
-    ...groupedRouteFiles
-  ];
-
   for (const filePath of routeLogicFiles) {
     filesChecked += 1;
     const source = await readFile(filePath, 'utf8');
+    routeSources.set(filePath, source);
     try {
       const exported = await loadDefaultExport(filePath);
+      validateRouterModuleContract(exported, `router logic ${filePath}`);
       const definitions = extractRouteDefinitions(exported);
       for (const definition of definitions) {
         validatePageManifest(definition, `route definition ${filePath}`);
+        routeEntries.push(buildRouteEntry(filePath, definition, resolvedAppRoot, 'route-logic'));
+        diagnostics.push(...collectManifestReferenceDiagnostics(filePath, definition, resolvedAppRoot, source));
       }
     } catch (error) {
       diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
     }
   }
+
+  for (const filePath of appLogicFiles) {
+    filesChecked += 1;
+    const source = await readFile(filePath, 'utf8');
+    try {
+      const exported = await loadDefaultExport(filePath);
+      validateLogicModuleContract(exported, `logic module ${filePath}`);
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
+    }
+    diagnostics.push(...collectArchitectureDiagnostics(filePath, source, 'logic'));
+  }
+
+  for (const filePath of apiFiles) {
+    filesChecked += 1;
+    const source = await readFile(filePath, 'utf8');
+    try {
+      const exported = await loadDefaultExport(filePath);
+      validateRpcModuleContract(exported, {
+        context: `api module ${filePath}`,
+        code: 'BRACKETS_API_INVALID',
+        kind: 'api'
+      });
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
+    }
+    diagnostics.push(...collectArchitectureDiagnostics(filePath, source, 'api'));
+  }
+
+  for (const filePath of dataFiles) {
+    filesChecked += 1;
+    const source = await readFile(filePath, 'utf8');
+    try {
+      const exported = await loadDefaultExport(filePath);
+      validateRpcModuleContract(exported, {
+        context: `data module ${filePath}`,
+        code: 'BRACKETS_DATA_INVALID',
+        kind: 'data'
+      });
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
+    }
+    diagnostics.push(...collectArchitectureDiagnostics(filePath, source, 'data'));
+  }
+
+  diagnostics.push(...collectRouteIdentityDiagnostics(routeEntries, routeSources));
 
   diagnostics.sort((left, right) => {
     if (left.file !== right.file) {

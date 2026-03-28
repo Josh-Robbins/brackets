@@ -6,12 +6,37 @@ Brackets is a no-build, HTML-first, Datastar-powered framework for fast SPAs, we
 
 Use this page as the public documentation front door on GitHub.
 
+Current status:
+
+- `v0.95`
+- syntax locked
+- Datastar underneath
+- ready for broader production-style evaluation
+
 ## Start Here
 
 - [Getting started](../docs.md)
 - [Guide](./guide.md)
 - [Reference](./reference.md)
 - [Agents](./agents.md)
+
+## Best Learning Path
+
+If you want the smoothest path in:
+
+1. [Getting started](../docs.md)
+2. [Guide](./guide.md)
+3. Run `node src/cli.js check demo/app`
+4. Run `node src/cli.js doctor demo/app --strict`
+5. [Reference](./reference.md)
+
+## Learn The Model
+
+If you want to understand how Brackets is meant to work before you build:
+
+- [Dynamic app, static shape](../docs.md#dynamic-app-static-shape)
+- [Modern flat-file app model](./guide.md#modern-flat-file-app-model)
+- [Platform contracts](./platform.md)
 
 ## Why Brackets
 
@@ -45,6 +70,12 @@ Use this page as the public documentation front door on GitHub.
 - [Getting started](../docs.md#local-first-app)
 - [Guide: local data patterns](./guide.md#local-data-patterns)
 - [Reference: storage guidance](./reference.md#storage-guidance)
+
+### Understand the modern architecture
+
+- [Getting started: dynamic app, static shape](../docs.md#dynamic-app-static-shape)
+- [Guide: modern flat-file app model](./guide.md#modern-flat-file-app-model)
+- [Platform: local data and authority profiles](./platform.md#4-local-data-contract)
 
 ### Ship to production
 
