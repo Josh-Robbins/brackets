@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=League+Spartan:wght@600;700;800&display=swap");
 
 :root {
   color-scheme: light;
@@ -119,9 +119,10 @@ a {
 }
 
 .brand-copy strong {
+  font-family: "League Spartan", "Inter", system-ui, sans-serif;
   font-size: 1rem;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.045em;
 }
 
 .brand-copy span {
@@ -184,11 +185,13 @@ a {
 }
 
 .hero h1 {
+  font-family: "League Spartan", "Inter", system-ui, sans-serif;
   margin: 1rem 0 0;
   font-size: clamp(3.45rem, 6vw, 6.1rem);
-  line-height: 0.9;
-  letter-spacing: -0.075em;
-  font-weight: 700;
+  line-height: 0.86;
+  letter-spacing: -0.06em;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .hero-text {
