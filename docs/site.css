@@ -102,10 +102,8 @@ a {
 .brand-mark {
   width: 3.55rem;
   height: 3.1rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
+  display: inline-grid;
+  place-items: center;
   background: linear-gradient(180deg, #2f2034 0%, #241013 100%);
   border: 1px solid rgba(255, 255, 255, 0.16);
   color: #fcfaf7;
@@ -114,76 +112,32 @@ a {
   clip-path: polygon(22% 10%, 78% 10%, 95% 32%, 50% 96%, 5% 32%);
 }
 
-.mark-bracket {
-  position: relative;
-  display: block;
-  width: 0.42rem;
-  height: 0.95rem;
-  transform: translateY(0.16rem);
+.mark-svg {
+  width: 1.18rem;
+  height: 0.92rem;
+  overflow: visible;
+  transform: translateY(0.18rem);
 }
 
-.mark-bracket::before,
-.mark-bracket::after {
-  content: "";
-  position: absolute;
-  background: currentColor;
-  border-radius: 999px;
-}
-
-.mark-bracket.left::before {
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 0.12rem;
-}
-
-.mark-bracket.left::after {
-  left: 0;
-  top: 0;
-  width: 0.42rem;
-  height: 0.12rem;
-  box-shadow: 0 0.83rem 0 0 currentColor;
-}
-
-.mark-bracket.right::before {
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 0.12rem;
-}
-
-.mark-bracket.right::after {
-  right: 0;
-  top: 0;
-  width: 0.42rem;
-  height: 0.12rem;
-  box-shadow: 0 0.83rem 0 0 currentColor;
+.mark-svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .inline-mark {
   display: inline-flex;
   align-items: center;
-  gap: 0.24em;
   margin-right: 0.14em;
   vertical-align: -0.02em;
 }
 
-.inline-mark .mark-bracket {
-  width: 0.46em;
-  height: 0.9em;
-  transform: translateY(0.02em);
-}
-
-.inline-mark .mark-bracket.left::before,
-.inline-mark .mark-bracket.right::before {
-  width: 0.1em;
-}
-
-.inline-mark .mark-bracket.left::after,
-.inline-mark .mark-bracket.right::after {
-  width: 0.46em;
-  height: 0.1em;
-  box-shadow: 0 0.8em 0 0 currentColor;
+.inline-mark .mark-svg {
+  width: 1em;
+  height: 0.78em;
+  transform: translateY(0.06em);
 }
 
 .brand-copy {
@@ -459,10 +413,8 @@ a {
 .rail-mark {
   width: 3.45rem;
   height: 3.05rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
+  display: inline-grid;
+  place-items: center;
   background: linear-gradient(180deg, #2f2034 0%, #241013 100%);
   color: #fcfaf7;
   font-weight: 700;
