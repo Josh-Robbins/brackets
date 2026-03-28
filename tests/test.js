@@ -11,6 +11,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../src/cli.js';
 import { loadBracketsConfig } from '../src/config.js';
+import { closeStorageAdapters, createStorageHelpers } from '../src/data-adapters.js';
 import { PAGE_MANIFEST_FIELDS, PAGE_MANIFEST_SCHEMA, page } from '../src/page.js';
 import { BracketsApp, buildNavigationPlan, canRegisterServiceWorker, createLocationSnapshot, evaluateFrameworkExpression, normalizeRouterRedirect, parseRoute, sanitizeHtmlFragment } from '../src/runtime/runtime.js';
 import { createServer } from '../src/server.js';
@@ -98,6 +99,21 @@ async function createRemoteServer(port) {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ size: Buffer.concat(chunks).length }));
       });
+      return;
+    }
+
+    if (url.pathname === '/inspect-proxy') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        forwardedHost: req.headers['x-forwarded-host'] ?? null,
+        forwardedProto: req.headers['x-forwarded-proto'] ?? null,
+        forwardedPrefix: req.headers['x-forwarded-prefix'] ?? null,
+        forwardedFor: req.headers['x-forwarded-for'] ?? null,
+        proxyHeader: req.headers['x-brackets-proxy'] ?? null,
+        origin: req.headers.origin ?? null,
+        referer: req.headers.referer ?? null,
+        secFetchSite: req.headers['sec-fetch-site'] ?? null
+      }));
       return;
     }
 
@@ -333,6 +349,38 @@ test('sanitizeHtmlFragment strips obviously dangerous html sinks', () => {
   assert.equal(html.includes('onclick='), false);
   assert.equal(html.includes('javascript:'), false);
   assert.equal(html.includes('<p>safe</p>'), true);
+});
+
+test('storage db transactions await async callbacks and roll back failed work', async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'brackets-tx-'));
+  const storage = createStorageHelpers((specifier) => path.join(rootDir, specifier));
+  const db = storage.db('storage/app.db');
+
+  try {
+    await db.exec('create table if not exists notes (id integer primary key, title text)');
+
+    const committed = await db.transaction(async (tx) => {
+      tx.run('insert into notes (title) values (?)', 'First');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      tx.run('insert into notes (title) values (?)', 'Second');
+      return tx.all('select title from notes order by id asc');
+    });
+    assert.deepEqual(committed.map((row) => row.title), ['First', 'Second']);
+
+    await assert.rejects(async () => db.transaction(async (tx) => {
+        tx.run('insert into notes (title) values (?)', 'Rolled back');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        throw new Error('stop');
+      }),
+      /stop/
+    );
+
+    const rows = await db.all('select title from notes order by id asc');
+    assert.deepEqual(rows.map((row) => row.title), ['First', 'Second']);
+  } finally {
+    closeStorageAdapters();
+    await rm(rootDir, { recursive: true, force: true });
+  }
 });
 
 test('BracketsApp html policy sanitizes by default and can allow trusted html explicitly', () => {
@@ -596,6 +644,22 @@ test('server exposes shell, routes, syntax transforms, rpc, proxy, and security 
     const proxySummary = await fetch('http://127.0.0.1:4393/remote/api/summary').then((response) => response.json());
     assert.equal(proxySummary.remoteCount, 11);
 
+    const proxyHeaders = await fetch('http://127.0.0.1:4393/remote/inspect-proxy', {
+      headers: {
+        Origin: 'http://malicious.example',
+        Referer: 'http://malicious.example/payload',
+        'Sec-Fetch-Site': 'cross-site'
+      }
+    }).then((response) => response.json());
+    assert.equal(proxyHeaders.forwardedHost, '127.0.0.1:4393');
+    assert.equal(proxyHeaders.forwardedProto, 'http');
+    assert.equal(proxyHeaders.forwardedPrefix, '/remote');
+    assert.equal(proxyHeaders.proxyHeader, 'true');
+    assert.equal(proxyHeaders.origin, null);
+    assert.equal(proxyHeaders.referer, null);
+    assert.equal(proxyHeaders.secFetchSite, null);
+    assert.equal(typeof proxyHeaders.forwardedFor, 'string');
+
     const apiSummary = await fetch('http://127.0.0.1:4393/__brackets/rpc', {
       method: 'POST',
       headers: sessionHeaders.headers,
@@ -856,6 +920,45 @@ test('server keeps redirect and body-limit policies configurable with safe defau
   } finally {
     await app.close();
     await new Promise((resolve) => remote.close(resolve));
+  }
+});
+
+test('server rejects proxy targets with embedded credentials and invalid rpc args', async () => {
+  await assert.rejects(
+    createServer({
+      appRoot: './demo/app',
+      port: 0,
+      host: '127.0.0.1',
+      proxies: {
+        '/remote': 'http://user:pass@127.0.0.1:4375'
+      }
+    }),
+    /must not include credentials/
+  );
+
+  const app = await createServer({
+    appRoot: './demo/app',
+    port: 4400,
+    host: '127.0.0.1'
+  });
+
+  try {
+    const sessionHeaders = await getSessionHeaders('http://127.0.0.1:4400');
+    const invalidArgs = await fetch('http://127.0.0.1:4400/__brackets/rpc', {
+      method: 'POST',
+      headers: sessionHeaders.headers,
+      body: JSON.stringify({
+        kind: 'data',
+        moduleUrl: '/app/data/contacts.data',
+        method: 'list',
+        args: { bad: true }
+      })
+    });
+    assert.equal(invalidArgs.status, 400);
+    const payload = await invalidArgs.json();
+    assert.match(payload.error, /args must be an array/i);
+  } finally {
+    await app.close();
   }
 });
 

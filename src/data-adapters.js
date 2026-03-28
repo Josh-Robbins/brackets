@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
 const fileQueues = new Map();
@@ -9,16 +9,29 @@ const databaseCache = new Map();
 function queueByKey(key, task) {
   const current = fileQueues.get(key) ?? Promise.resolve();
   const next = current.catch(() => {}).then(task);
-  fileQueues.set(key, next.finally(() => {
-    if (fileQueues.get(key) === next) {
+  let queued;
+  const settled = next.finally(() => {
+    if (fileQueues.get(key) === queued) {
       fileQueues.delete(key);
     }
-  }));
+  });
+  queued = settled.catch(() => {});
+  fileQueues.set(key, queued);
   return next;
 }
 
 async function ensureParentDirectory(filePath) {
   await mkdir(path.dirname(filePath), { recursive: true });
+}
+
+async function writeTextAtomically(filePath, content) {
+  await ensureParentDirectory(filePath);
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`
+  );
+  await writeFile(tempPath, content, 'utf8');
+  await rename(tempPath, filePath);
 }
 
 function parseScalar(value) {
@@ -178,9 +191,8 @@ export function createStorageHelpers(resolveSpecifier) {
           return queueByKey(filePath, () => readStructuredFile(filePath, JSON.parse, fallbackValue));
         },
         async write(nextValue) {
-          await ensureParentDirectory(filePath);
           return queueByKey(filePath, async () => {
-            await writeFile(filePath, JSON.stringify(nextValue, null, 2), 'utf8');
+            await writeTextAtomically(filePath, JSON.stringify(nextValue, null, 2));
             return nextValue;
           });
         }
@@ -193,9 +205,8 @@ export function createStorageHelpers(resolveSpecifier) {
           return queueByKey(filePath, () => readStructuredFile(filePath, parseYaml, fallbackValue));
         },
         async write(nextValue) {
-          await ensureParentDirectory(filePath);
           return queueByKey(filePath, async () => {
-            await writeFile(filePath, `${stringifyYaml(nextValue)}\n`, 'utf8');
+            await writeTextAtomically(filePath, `${stringifyYaml(nextValue)}\n`);
             return nextValue;
           });
         }
@@ -235,9 +246,9 @@ export function createStorageHelpers(resolveSpecifier) {
         },
         async transaction(callback) {
           await ensureParentDirectory(filePath);
-          return queueByKey(filePath, () => {
+          return queueByKey(filePath, async () => {
             const db = getDatabase(filePath);
-            db.exec('BEGIN');
+            db.exec('BEGIN IMMEDIATE');
             try {
               const tx = {
                 exec(sql) {
@@ -253,11 +264,15 @@ export function createStorageHelpers(resolveSpecifier) {
                   return db.prepare(sql).all(...params);
                 }
               };
-              const result = callback(tx);
+              const result = await callback(tx);
               db.exec('COMMIT');
               return result;
             } catch (error) {
-              db.exec('ROLLBACK');
+              try {
+                db.exec('ROLLBACK');
+              } catch {
+                // best effort rollback cleanup
+              }
               throw error;
             }
           });

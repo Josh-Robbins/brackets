@@ -20,6 +20,17 @@ const DEFAULT_RPC_BODY_LIMIT_BYTES = 1024 * 1024;
 const DEFAULT_PROXY_BODY_LIMIT_BYTES = 1024 * 1024;
 const DATASTAR_BUNDLE_URL = 'https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.0-RC.8/bundles/datastar.js';
 const FRAMEWORK_DEMO_DIR = path.resolve('src/framework/demo');
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'proxy-connection',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade'
+]);
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -144,6 +155,9 @@ function normalizeProxies(proxies, defaults = {}) {
     const target = new URL(config.target);
     if (!['http:', 'https:'].includes(target.protocol)) {
       throw new HttpError(500, `Proxy target must use http or https: ${config.target}`);
+    }
+    if (target.username || target.password) {
+      throw new HttpError(500, `Proxy target must not include credentials: ${config.target}`);
     }
 
     normalized[prefix] = {
@@ -797,17 +811,35 @@ async function parseBody(req, limit = DEFAULT_RPC_BODY_LIMIT_BYTES) {
 
 async function proxyRequest(req, res, proxyConfig, prefix) {
   const url = new URL(req.url, 'http://127.0.0.1');
-  const targetUrl = new URL(url.pathname.slice(prefix.length) + url.search, proxyConfig.target);
+  const targetPath = url.pathname.slice(prefix.length) || '/';
+  const targetUrl = new URL(`${targetPath}${url.search}`, proxyConfig.target);
   const method = req.method ?? 'GET';
   const hasBody = !['GET', 'HEAD'].includes(method);
   const body = hasBody ? await readRawBody(req, proxyConfig.bodyLimitBytes) : undefined;
 
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers)) {
-    if (!value || ['host', 'connection', 'content-length'].includes(name.toLowerCase())) {
+    const lowerName = name.toLowerCase();
+    if (
+      !value
+      || lowerName === 'host'
+      || lowerName === 'content-length'
+      || lowerName === 'origin'
+      || lowerName === 'referer'
+      || lowerName.startsWith('sec-')
+      || lowerName.startsWith('x-forwarded-')
+      || HOP_BY_HOP_HEADERS.has(lowerName)
+    ) {
       continue;
     }
     headers.set(name, Array.isArray(value) ? value.join(', ') : value);
+  }
+  headers.set('X-Forwarded-Host', req.headers.host ?? '');
+  headers.set('X-Forwarded-Proto', 'http');
+  headers.set('X-Forwarded-Prefix', prefix);
+  headers.set('X-Brackets-Proxy', 'true');
+  if (req.socket?.remoteAddress) {
+    headers.set('X-Forwarded-For', req.socket.remoteAddress);
   }
 
   const response = await fetch(targetUrl, {
@@ -818,7 +850,8 @@ async function proxyRequest(req, res, proxyConfig, prefix) {
   });
   const proxyHeaders = {};
   response.headers.forEach((value, name) => {
-    if (['content-length', 'transfer-encoding', 'connection', 'server'].includes(name.toLowerCase())) {
+    const lowerName = name.toLowerCase();
+    if (lowerName === 'content-length' || lowerName === 'server' || HOP_BY_HOP_HEADERS.has(lowerName)) {
       return;
     }
     proxyHeaders[name] = value;
@@ -1342,7 +1375,7 @@ function isSameOriginRequest(req, serverOrigin) {
 }
 
 function validateRpcPayload(payload) {
-  const { kind, moduleUrl, method } = payload ?? {};
+  const { kind, moduleUrl, method, args = [] } = payload ?? {};
   if (!['api', 'data'].includes(kind)) {
     throw new HttpError(400, `Unsupported RPC kind ${kind}`);
   }
@@ -1361,6 +1394,10 @@ function validateRpcPayload(payload) {
 
   if (kind === 'data' && !moduleUrl.endsWith('.data')) {
     throw new HttpError(400, `Data RPC modules must end in .data: ${moduleUrl}`);
+  }
+
+  if (!Array.isArray(args)) {
+    throw new HttpError(400, 'RPC args must be an array');
   }
 }
 
@@ -1483,7 +1520,7 @@ export async function createServer({
         return;
       }
 
-      for (const [prefix, proxyConfig] of Object.entries(normalizedProxies)) {
+      for (const [prefix, proxyConfig] of Object.entries(normalizedProxies).sort((left, right) => right[0].length - left[0].length)) {
         if (req.url.startsWith(prefix)) {
           await proxyRequest(req, res, proxyConfig, prefix);
           return;

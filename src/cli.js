@@ -150,11 +150,31 @@ async function withTemporaryServer(options, handler) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Request failed for ${url}: ${response.status}`);
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return response.json();
+      }
+
+      if (response.status >= 500 && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
+        continue;
+      }
+
+      throw new Error(`Request failed for ${url}: ${response.status}`);
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
+        continue;
+      }
+      throw error;
+    }
   }
-  return response.json();
+
+  throw lastError ?? new Error(`Request failed for ${url}`);
 }
 
 function routeTable(routes) {
