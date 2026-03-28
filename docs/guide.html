@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brackets Docs | Guide</title>
+    <meta
+      name="description"
+      content="Practical Brackets patterns for websites, SPAs, local-first apps, and backend-connected apps."
+    />
+    <meta name="theme-color" content="#714cb6" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Brackets docs home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="shield-logo" viewBox="0 0 64 56" aria-hidden="true">
+              <defs>
+                <linearGradient id="guide-shield-gradient" x1="32" y1="6" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#2f2034" />
+                  <stop offset="1" stop-color="#241013" />
+                </linearGradient>
+              </defs>
+              <path d="M18 7Q20 6 22 6H42Q44 6 46 7L56 17Q58 19 56.5 21.5L34 48Q32 50.5 30 48L7.5 21.5Q6 19 8 17L18 7Z" fill="url(#guide-shield-gradient)" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>Brackets</strong>
+            <span>Docs</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="./start.html">Start</a>
+          <a href="./guide.html">Guide</a>
+          <a href="./reference.html">Reference</a>
+          <a href="./agents.html">Agents</a>
+        </nav>
+      </header>
+
+      <main class="page docs-page">
+        <div class="docs-layout">
+          <aside class="docs-sidebar" aria-label="Documentation navigation">
+            <h2>Docs</h2>
+            <div class="docs-nav-group">
+              <strong>Learn</strong>
+              <nav class="docs-nav">
+                <a href="./start.html">Start</a>
+                <a href="./guide.html" aria-current="page">Guide</a>
+                <a href="./reference.html">Reference</a>
+                <a href="./agents.html">Agents</a>
+              </nav>
+            </div>
+            <div class="docs-nav-group">
+              <strong>Operate</strong>
+              <nav class="docs-nav">
+                <a href="./platform.html">Platform</a>
+                <a href="./release.html">Release</a>
+              </nav>
+            </div>
+          </aside>
+
+          <article class="docs-content prose">
+            <div class="docs-intro">
+              <span class="eyebrow">Practical workflow</span>
+              <h1>Guide</h1>
+              <p>
+                This is the practical path for building real apps with Brackets. Start small, keep files clean, and
+                let Datastar do the live frontend work underneath.
+              </p>
+            </div>
+
+            <section id="mental-model">
+              <h2>Start with this mental model</h2>
+              <ul>
+                <li><code>.view</code> says what page exists.</li>
+                <li><code>.html</code> says what the page looks like.</li>
+                <li><code>.logic</code> says when the app does something.</li>
+                <li><code>.data</code> says what the data is and how it behaves.</li>
+                <li><code>.api</code> talks to shared authority and external systems.</li>
+              </ul>
+            </section>
+
+            <section id="small-files">
+              <h2>Keep files small and clean</h2>
+              <div class="docs-callout-grid">
+                <div class="docs-callout">
+                  <strong>.view</strong>
+                  <p>Keep it declarative. Page id, route, html, layout, and named dependencies.</p>
+                </div>
+                <div class="docs-callout">
+                  <strong>.html</strong>
+                  <p>Keep it presentational. Use Brackets syntax, but keep heavy logic out.</p>
+                </div>
+                <div class="docs-callout">
+                  <strong>.logic</strong>
+                  <p>Keep it orchestration-first. Actions, route-aware flow, and lifecycle hooks.</p>
+                </div>
+                <div class="docs-callout">
+                  <strong>.data</strong>
+                  <p>Keep it model-first. Validation, transforms, local queries, and persistence rules.</p>
+                </div>
+              </div>
+            </section>
+
+            <section id="spa">
+              <h2>Build a fast SPA</h2>
+              <p>
+                Brackets supports both file-based and logic-based routing together. You can use lightweight
+                <code>.view</code> routes for most pages and layer in <code>router.logic</code> or
+                <code>/routes/*.logic</code> when the app needs stronger routing rules.
+              </p>
+              <ul>
+                <li>Layouts are preserved across same-layout route changes.</li>
+                <li>Route warming and prefetch are built in.</li>
+                <li>Route-target helpers keep router code cleaner than raw strings.</li>
+              </ul>
+            </section>
+
+            <section id="local-first">
+              <h2>Build a local-first app</h2>
+              <p>
+                Put most or all model code in <code>.data</code>. Let the runtime or host manage
+                <code>.json</code>, <code>.yaml</code>, and <code>.db</code>, then keep <code>.logic</code> focused on
+                app behavior.
+              </p>
+              <pre><code>// contacts.data
+({
+  async list({ storage }) {
+    return storage.db('./contacts.db').query('select * from contacts order by name')
+  }
+})</code></pre>
+            </section>
+
+            <section id="connected">
+              <h2>Build a connected app</h2>
+              <p>
+                Use <code>.api</code> when you need shared authority, external services, or remote sync. The frontend
+                file model stays the same, and Datastar-compatible HTTP and SSE remain the transfer path.
+              </p>
+            </section>
+
+            <section id="production">
+              <h2>Move to production</h2>
+              <p>
+                Brackets is portable by design. The same app model can move from a desktop folder to a static server,
+                Docker, or a paired backend without changing the public language.
+              </p>
+            </section>
+
+            <div class="docs-next">
+              <a href="./reference.html">
+                <strong>Reference</strong>
+                <span>Review the locked syntax and file contract.</span>
+              </a>
+              <a href="./platform.html">
+                <strong>Platform</strong>
+                <span>See Docker, host, and backend deployment guidance.</span>
+              </a>
+            </div>
+          </article>
+
+          <aside class="docs-toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <nav>
+              <a href="#mental-model">Mental model</a>
+              <a href="#small-files">Small files</a>
+              <a href="#spa">Fast SPA</a>
+              <a href="#local-first">Local-first</a>
+              <a href="#connected">Connected app</a>
+              <a href="#production">Production</a>
+            </nav>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

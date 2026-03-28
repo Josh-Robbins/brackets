@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brackets Docs | Platform</title>
+    <meta
+      name="description"
+      content="Desktop, static server, Docker, and paired-backend platform guidance for Brackets."
+    />
+    <meta name="theme-color" content="#714cb6" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Brackets docs home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="shield-logo" viewBox="0 0 64 56" aria-hidden="true">
+              <defs>
+                <linearGradient id="platform-shield-gradient" x1="32" y1="6" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#2f2034" />
+                  <stop offset="1" stop-color="#241013" />
+                </linearGradient>
+              </defs>
+              <path d="M18 7Q20 6 22 6H42Q44 6 46 7L56 17Q58 19 56.5 21.5L34 48Q32 50.5 30 48L7.5 21.5Q6 19 8 17L18 7Z" fill="url(#platform-shield-gradient)" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>Brackets</strong>
+            <span>Docs</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="./start.html">Start</a>
+          <a href="./guide.html">Guide</a>
+          <a href="./reference.html">Reference</a>
+          <a href="./agents.html">Agents</a>
+        </nav>
+      </header>
+
+      <main class="page docs-page">
+        <div class="docs-layout">
+          <aside class="docs-sidebar" aria-label="Documentation navigation">
+            <h2>Docs</h2>
+            <div class="docs-nav-group">
+              <strong>Learn</strong>
+              <nav class="docs-nav">
+                <a href="./start.html">Start</a>
+                <a href="./guide.html">Guide</a>
+                <a href="./reference.html">Reference</a>
+                <a href="./agents.html">Agents</a>
+              </nav>
+            </div>
+            <div class="docs-nav-group">
+              <strong>Operate</strong>
+              <nav class="docs-nav">
+                <a href="./platform.html" aria-current="page">Platform</a>
+                <a href="./release.html">Release</a>
+              </nav>
+            </div>
+          </aside>
+
+          <article class="docs-content prose">
+            <div class="docs-intro">
+              <span class="eyebrow">Run anywhere</span>
+              <h1>Platform</h1>
+              <p>
+                Brackets keeps one app model across desktop-folder development, static servers, Docker, and paired
+                backends. The shape stays simple even when the deployment grows up.
+              </p>
+            </div>
+
+            <section id="profiles">
+              <h2>Deployment profiles</h2>
+              <ul>
+                <li><strong>Desktop-folder or local-host:</strong> local files, local persistence, same-origin host when needed.</li>
+                <li><strong>Static server:</strong> same UI model, same routes, optional local-first behavior, optional remote authority.</li>
+                <li><strong>Paired backend:</strong> same frontend contract, plus <code>.api</code> for shared authority.</li>
+              </ul>
+            </section>
+
+            <section id="docker">
+              <h2>Docker</h2>
+              <p>
+                Docker is a packaging and hosting path, not a new framework model. Mount the app, keep persistent
+                storage explicit, and keep Brackets same-origin where possible.
+              </p>
+              <pre><code>services:
+  brackets:
+    image: your-brackets-host
+    volumes:
+      - ./app:/srv/brackets/app
+      - ./storage:/srv/brackets/storage</code></pre>
+            </section>
+
+            <section id="backends">
+              <h2>Backends</h2>
+              <p>
+                Brackets stays backend agnostic. C#, Tauri, .NET, Go, Rust, Python, PHP, Ruby, Java, Node, or a flat-file
+                backend can all fit behind <code>.api</code> without changing the frontend language.
+              </p>
+            </section>
+
+            <div class="docs-next">
+              <a href="./release.html">
+                <strong>Release</strong>
+                <span>See the portable zip and hosted download story.</span>
+              </a>
+              <a href="./guide.html">
+                <strong>Guide</strong>
+                <span>Go back to the practical build workflow.</span>
+              </a>
+            </div>
+          </article>
+
+          <aside class="docs-toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <nav>
+              <a href="#profiles">Profiles</a>
+              <a href="#docker">Docker</a>
+              <a href="#backends">Backends</a>
+            </nav>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

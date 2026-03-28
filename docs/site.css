@@ -678,3 +678,262 @@ code {
     margin-top: 0.8rem;
   }
 }
+
+.docs-page {
+  min-height: auto;
+  padding-top: 0.4rem;
+}
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr) 13rem;
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1.2rem;
+}
+
+.docs-sidebar,
+.docs-toc,
+.docs-content {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+}
+
+.docs-sidebar,
+.docs-toc {
+  position: sticky;
+  top: 1rem;
+  padding: 1rem;
+}
+
+.docs-content {
+  padding: 1.4rem;
+}
+
+.docs-sidebar h2,
+.docs-toc h2 {
+  margin: 0 0 0.85rem;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.docs-nav-group + .docs-nav-group {
+  margin-top: 1rem;
+}
+
+.docs-nav-group strong {
+  display: block;
+  margin-bottom: 0.45rem;
+  font-size: 0.92rem;
+}
+
+.docs-nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.docs-nav a,
+.docs-toc a {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.75rem;
+  text-decoration: none;
+  color: var(--muted);
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.docs-nav a:hover,
+.docs-toc a:hover {
+  background: rgba(232, 224, 255, 0.58);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+.docs-nav a[aria-current="page"],
+.docs-toc a[aria-current="true"] {
+  background: rgba(232, 224, 255, 0.9);
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.docs-intro {
+  margin-bottom: 1.5rem;
+}
+
+.docs-intro .eyebrow {
+  margin-bottom: 0.9rem;
+}
+
+.docs-intro h1 {
+  margin: 0;
+  font-family: "League Spartan", "Inter", system-ui, sans-serif;
+  font-size: clamp(2.35rem, 4vw, 3.35rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+  text-transform: uppercase;
+}
+
+.docs-intro p {
+  margin: 1rem 0 0;
+  max-width: 48rem;
+  color: var(--muted);
+  line-height: 1.75;
+  font-size: 1.03rem;
+}
+
+.docs-actions {
+  margin-top: 1.15rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.prose section + section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+.prose h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+}
+
+.prose h3 {
+  margin: 1.15rem 0 0.45rem;
+  font-size: 1.02rem;
+}
+
+.prose p,
+.prose li {
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.prose ul,
+.prose ol {
+  margin: 0.7rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.prose li + li {
+  margin-top: 0.32rem;
+}
+
+.prose pre {
+  margin: 0.9rem 0 0;
+  padding: 1rem;
+  overflow: auto;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: rgba(36, 16, 19, 0.96);
+  color: #fcfaf7;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.prose pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.92rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.9rem;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+}
+
+.prose th,
+.prose td {
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.prose th {
+  background: rgba(232, 224, 255, 0.55);
+  color: var(--ink);
+}
+
+.docs-callout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.docs-callout {
+  padding: 1rem;
+  border-radius: 0.95rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.docs-callout strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.docs-next {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.docs-next a {
+  text-decoration: none;
+  padding: 0.9rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  min-width: 14rem;
+}
+
+.docs-next strong {
+  display: block;
+  margin-bottom: 0.22rem;
+}
+
+.docs-toc nav {
+  display: grid;
+  gap: 0.35rem;
+}
+
+@media (max-width: 1100px) {
+  .docs-layout {
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+
+  .docs-toc {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .docs-sidebar,
+  .docs-toc {
+    position: static;
+  }
+
+  .docs-callout-grid {
+    grid-template-columns: 1fr;
+  }
+}

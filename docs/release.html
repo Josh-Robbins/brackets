@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brackets Docs | Release</title>
+    <meta
+      name="description"
+      content="Portable Brackets v0.95 release guidance for Windows, macOS, Linux, and hosted docs downloads."
+    />
+    <meta name="theme-color" content="#714cb6" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Brackets docs home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="shield-logo" viewBox="0 0 64 56" aria-hidden="true">
+              <defs>
+                <linearGradient id="release-shield-gradient" x1="32" y1="6" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#2f2034" />
+                  <stop offset="1" stop-color="#241013" />
+                </linearGradient>
+              </defs>
+              <path d="M18 7Q20 6 22 6H42Q44 6 46 7L56 17Q58 19 56.5 21.5L34 48Q32 50.5 30 48L7.5 21.5Q6 19 8 17L18 7Z" fill="url(#release-shield-gradient)" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>Brackets</strong>
+            <span>Docs</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="./start.html">Start</a>
+          <a href="./guide.html">Guide</a>
+          <a href="./reference.html">Reference</a>
+          <a href="./agents.html">Agents</a>
+        </nav>
+      </header>
+
+      <main class="page docs-page">
+        <div class="docs-layout">
+          <aside class="docs-sidebar" aria-label="Documentation navigation">
+            <h2>Docs</h2>
+            <div class="docs-nav-group">
+              <strong>Learn</strong>
+              <nav class="docs-nav">
+                <a href="./start.html">Start</a>
+                <a href="./guide.html">Guide</a>
+                <a href="./reference.html">Reference</a>
+                <a href="./agents.html">Agents</a>
+              </nav>
+            </div>
+            <div class="docs-nav-group">
+              <strong>Operate</strong>
+              <nav class="docs-nav">
+                <a href="./platform.html">Platform</a>
+                <a href="./release.html" aria-current="page">Release</a>
+              </nav>
+            </div>
+          </aside>
+
+          <article class="docs-content prose">
+            <div class="docs-intro">
+              <span class="eyebrow">Portable release</span>
+              <h1>Release</h1>
+              <p>
+                Brackets v0.95 ships as an install-free portable zip. The hosted docs detect the visitor’s OS and link
+                the matching download while keeping the Brackets app model the same everywhere.
+              </p>
+              <div class="docs-actions">
+                <a class="button button-primary" href="./downloads/Brackets-v0.95-windows.zip">Download</a>
+                <a class="button button-secondary" href="./downloads/release.json">Release manifest</a>
+              </div>
+            </div>
+
+            <section id="shape">
+              <h2>Portable shape</h2>
+              <pre><code>Brackets/
+  framework/
+  app/
+  config/
+  tests/
+  index.html
+  README.md
+  robots.txt
+  LICENSE</code></pre>
+            </section>
+
+            <section id="os">
+              <h2>Windows, macOS, and Linux</h2>
+              <p>
+                The hosted docs serve OS-labeled downloads so the page can feel native to the visitor. Right now they all
+                deliver the same universal Brackets v0.95 portable package.
+              </p>
+            </section>
+
+            <section id="production">
+              <h2>Production testing</h2>
+              <p>
+                Brackets stays at v0.95 while outside teams test it in production-style environments. The packaging is
+                ready, but the public stability label stays conservative until more people use it for real work.
+              </p>
+            </section>
+          </article>
+
+          <aside class="docs-toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <nav>
+              <a href="#shape">Portable shape</a>
+              <a href="#os">OS downloads</a>
+              <a href="#production">Production testing</a>
+            </nav>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

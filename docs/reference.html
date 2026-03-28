@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brackets Docs | Reference</title>
+    <meta
+      name="description"
+      content="The Brackets language and runtime reference: file types, routing, manifests, lifecycle, syntax, and transport."
+    />
+    <meta name="theme-color" content="#714cb6" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="./index.html" aria-label="Brackets docs home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg class="shield-logo" viewBox="0 0 64 56" aria-hidden="true">
+              <defs>
+                <linearGradient id="reference-shield-gradient" x1="32" y1="6" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stop-color="#2f2034" />
+                  <stop offset="1" stop-color="#241013" />
+                </linearGradient>
+              </defs>
+              <path d="M18 7Q20 6 22 6H42Q44 6 46 7L56 17Q58 19 56.5 21.5L34 48Q32 50.5 30 48L7.5 21.5Q6 19 8 17L18 7Z" fill="url(#reference-shield-gradient)" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>Brackets</strong>
+            <span>Docs</span>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary">
+          <a href="./start.html">Start</a>
+          <a href="./guide.html">Guide</a>
+          <a href="./reference.html">Reference</a>
+          <a href="./agents.html">Agents</a>
+        </nav>
+      </header>
+
+      <main class="page docs-page">
+        <div class="docs-layout">
+          <aside class="docs-sidebar" aria-label="Documentation navigation">
+            <h2>Docs</h2>
+            <div class="docs-nav-group">
+              <strong>Learn</strong>
+              <nav class="docs-nav">
+                <a href="./start.html">Start</a>
+                <a href="./guide.html">Guide</a>
+                <a href="./reference.html" aria-current="page">Reference</a>
+                <a href="./agents.html">Agents</a>
+              </nav>
+            </div>
+            <div class="docs-nav-group">
+              <strong>Operate</strong>
+              <nav class="docs-nav">
+                <a href="./platform.html">Platform</a>
+                <a href="./release.html">Release</a>
+              </nav>
+            </div>
+          </aside>
+
+          <article class="docs-content prose">
+            <div class="docs-intro">
+              <span class="eyebrow">Locked contract</span>
+              <h1>Reference</h1>
+              <p>
+                This is the public Brackets contract. The syntax is locked, Datastar stays underneath, and this page
+                captures the core model you can count on in v0.95.
+              </p>
+            </div>
+
+            <section id="file-types">
+              <h2>File types</h2>
+              <table>
+                <thead>
+                  <tr><th>File type</th><th>Meaning</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>.view</code></td><td>What page exists.</td></tr>
+                  <tr><td><code>.logic</code></td><td>How the app behaves.</td></tr>
+                  <tr><td><code>.api</code></td><td>How the app talks to a backend.</td></tr>
+                  <tr><td><code>.data</code></td><td>How the app defines and talks to local models and persistence rules.</td></tr>
+                  <tr><td><code>.html</code></td><td>Actual templates, pages, layouts, and components.</td></tr>
+                  <tr><td><code>.json</code></td><td>Simple structured storage.</td></tr>
+                  <tr><td><code>.yaml</code></td><td>Human-editable config or content storage.</td></tr>
+                  <tr><td><code>.db</code></td><td>File-backed database storage.</td></tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section id="routing">
+              <h2>Routing</h2>
+              <ul>
+                <li><code>router.logic</code> provides the router engine and global hooks.</li>
+                <li><code>view.route</code> gives page-level routes.</li>
+                <li><code>/routes/*.logic</code> lets large apps add grouped route logic.</li>
+                <li>Brackets supports file-based and logic-based routing together.</li>
+              </ul>
+            </section>
+
+            <section id="manifest">
+              <h2>Page manifest</h2>
+              <p>
+                The required core is still small: <code>id</code> and <code>html</code>. Everything else stays additive:
+                route, layout, logic, aliases, preload, auth, assets, api, and data.
+              </p>
+            </section>
+
+            <section id="context">
+              <h2>Context and lifecycle</h2>
+              <p>
+                <code>ctx</code> is the canonical runtime object. Keep it grouped, teachable, and small.
+              </p>
+              <ul>
+                <li><code>ctx.route</code></li>
+                <li><code>ctx.state</code></li>
+                <li><code>ctx.action</code></li>
+                <li><code>ctx.api</code></li>
+                <li><code>ctx.data</code></li>
+                <li><code>ctx.nav</code></li>
+                <li><code>ctx.cache</code></li>
+                <li><code>ctx.auth</code></li>
+              </ul>
+            </section>
+
+            <section id="syntax">
+              <h2>Syntax</h2>
+              <table>
+                <thead>
+                  <tr><th>Purpose</th><th>Syntax</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Class shorthand</td><td><code>[name]</code></td></tr>
+                  <tr><td>ID shorthand</td><td><code>#name</code></td></tr>
+                  <tr><td>Event</td><td><code>@event="..."</code></td></tr>
+                  <tr><td>State</td><td><code>:state</code></td></tr>
+                  <tr><td>Calculated values</td><td><code>:calc</code></td></tr>
+                  <tr><td>Text</td><td><code>:text</code></td></tr>
+                  <tr><td>HTML</td><td><code>:html</code></td></tr>
+                  <tr><td>Show</td><td><code>:show</code></td></tr>
+                  <tr><td>Bind</td><td><code>:bind</code></td></tr>
+                  <tr><td>If</td><td><code>:if</code></td></tr>
+                  <tr><td>Each</td><td><code>:each</code></td></tr>
+                  <tr><td>Use</td><td><code>:use</code></td></tr>
+                  <tr><td>Props</td><td><code>:props</code></td></tr>
+                  <tr><td>Area</td><td><code>:area</code></td></tr>
+                  <tr><td>Fill</td><td><code>:fill</code></td></tr>
+                  <tr><td>Mount</td><td><code>:mount</code></td></tr>
+                  <tr><td>Reactive class</td><td><code>:class.name</code></td></tr>
+                  <tr><td>Reactive attribute</td><td><code>:set.name</code></td></tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section id="transport">
+              <h2>Transport</h2>
+              <p>
+                Brackets keeps transport HTTP-first and Datastar-compatible. <code>read()</code> is the live SSE path.
+                <code>request()</code>, <code>get()</code>, <code>create()</code>, <code>update()</code>,
+                <code>patch()</code>, and <code>delete()</code> stay HTTP by default.
+              </p>
+            </section>
+
+            <div class="docs-next">
+              <a href="./guide.html">
+                <strong>Guide</strong>
+                <span>See how to apply the contract in real apps.</span>
+              </a>
+              <a href="./agents.html">
+                <strong>Agents</strong>
+                <span>See the AI operating rules for Brackets.</span>
+              </a>
+            </div>
+          </article>
+
+          <aside class="docs-toc" aria-label="On this page">
+            <h2>On this page</h2>
+            <nav>
+              <a href="#file-types">File types</a>
+              <a href="#routing">Routing</a>
+              <a href="#manifest">Manifest</a>
+              <a href="#context">Context</a>
+              <a href="#syntax">Syntax</a>
+              <a href="#transport">Transport</a>
+            </nav>
+          </aside>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
