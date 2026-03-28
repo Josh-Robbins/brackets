@@ -12,19 +12,19 @@
       <stop offset="1" stop-color="{{ACCENT}}"/>
     </linearGradient>
     <clipPath id="brx-shield-clip">
-      <path d="M162 40L212 48L250 78L242 136L220 184L162 230L104 184L82 136L74 78L112 48L162 40Z"/>
+      <path d="M116 58H208L246 102L162 222L78 102L116 58Z"/>
     </clipPath>
   </defs>
   <rect x="20" y="20" width="720" height="240" rx="42" fill="url(#brx-shell)"/>
-  <path d="M162 40L212 48L250 78L242 136L220 184L162 230L104 184L82 136L74 78L112 48L162 40Z" fill="url(#brx-glow)"/>
-  <path d="M162 52L206 59L238 85L231 135L212 178L162 214L112 178L93 135L86 85L118 59L162 52Z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.34)"/>
-  <path d="M162 64L200 70L226 92L220 134L204 168L162 198L120 168L104 134L98 92L124 70L162 64Z" fill="rgba(255,255,255,0.08)"/>
+  <path d="M116 58H208L246 102L162 222L78 102L116 58Z" fill="url(#brx-glow)"/>
+  <path d="M123 72H201L230 105L162 202L94 105L123 72Z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.34)"/>
+  <path d="M130 84H194L218 108L162 186L106 108L130 84Z" fill="rgba(255,255,255,0.08)"/>
 
   <g clip-path="url(#brx-shield-clip)">
-    <path d="M138 104H112V180H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M186 104H212V180H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M150 144H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
-    <circle cx="162" cy="144" r="30" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
+    <path d="M138 98H112V162H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M186 98H212V162H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 130H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="162" cy="130" r="28" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
   </g>
 
   <text x="316" y="86" fill="{{ACCENT}}" font-family="Segoe UI, system-ui, sans-serif" font-size="18" letter-spacing="0.28em">SUPERHUMAN HTML FRAMEWORK</text>
