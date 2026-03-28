@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="128" height="128" rx="30" fill="{{PANEL}}"/>
-  <rect x="14" y="14" width="100" height="100" rx="26" fill="{{ACCENT}}"/>
-  <rect x="26" y="26" width="76" height="76" rx="20" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.35)"/>
-  <path d="M52 38H40V90H52" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M76 38H88V90H76" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M58 64H70" stroke="{{INK}}" stroke-width="7" stroke-linecap="round"/>
+  <path d="M64 14L100 28L94 74L64 104L34 74L28 28L64 14Z" fill="{{ACCENT}}"/>
+  <path d="M64 22L94 34L89 72L64 96L39 72L34 34L64 22Z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.34)"/>
+  <path d="M52 38H40V86H52" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76 38H88V86H76" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M58 62H70" stroke="{{INK}}" stroke-width="7" stroke-linecap="round"/>
 </svg>

@@ -11,15 +11,21 @@
       <stop stop-color="{{ACCENT_SOFT}}"/>
       <stop offset="1" stop-color="{{ACCENT}}"/>
     </linearGradient>
+    <clipPath id="brx-shield-clip">
+      <path d="M162 44L244 72L232 174L162 232L92 174L80 72L162 44Z"/>
+    </clipPath>
   </defs>
   <rect x="20" y="20" width="720" height="240" rx="42" fill="url(#brx-shell)"/>
-  <rect x="44" y="44" width="236" height="192" rx="34" fill="url(#brx-glow)"/>
-  <rect x="72" y="72" width="180" height="136" rx="24" fill="rgba(255,255,255,0.28)" stroke="rgba(255,255,255,0.35)"/>
+  <path d="M162 44L244 72L232 174L162 232L92 174L80 72L162 44Z" fill="url(#brx-glow)"/>
+  <path d="M162 56L230 80L220 168L162 216L104 168L94 80L162 56Z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.34)"/>
+  <path d="M162 68L218 88L210 161L162 201L114 161L106 88L162 68Z" fill="rgba(255,255,255,0.08)"/>
 
-  <path d="M138 92H112V188H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M186 92H212V188H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M150 140H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="162" cy="140" r="26" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.3)"/>
+  <g clip-path="url(#brx-shield-clip)">
+    <path d="M138 90H112V190H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M186 90H212V190H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 140H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="162" cy="140" r="28" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
+  </g>
 
   <text x="316" y="86" fill="{{ACCENT}}" font-family="Segoe UI, system-ui, sans-serif" font-size="18" letter-spacing="0.28em">SUPERHUMAN HTML FRAMEWORK</text>
   <text x="316" y="150" fill="{{INK}}" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-weight="700">[ ] {{NAME}}</text>
