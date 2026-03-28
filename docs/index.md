@@ -1,34 +1,37 @@
 # Brackets Docs
 
+![Brackets](./hero.svg)
+
 Brackets is a no-build, HTML-first, Datastar-powered framework for fast SPAs, websites, apps, and desktop-style experiences.
 
-Use this page as the documentation home on GitHub.
+Use this page as the public documentation front door on GitHub.
 
 ## Start Here
 
 - [Getting started](../docs.md)
 - [Guide](./guide.md)
 - [Reference](./reference.md)
+- [Agents](./agents.md)
 
-## What Makes Brackets Different
+## Why Brackets
 
 - No build step.
 - HTML stays the main template surface.
 - Datastar stays the engine.
-- Brackets adds the file model, syntax, routing, lifecycle, and host story.
-- Apps stay portable from desktop folders to servers and paired backends.
+- Brackets adds routing, layouts, lifecycle, app structure, and portable hosting.
+- The same app model can work with local files, SQLite, C#, Tauri, .NET, Go, Rust, Python, PHP, Ruby, Java, Node, and other backends.
 
 ## Learn By Goal
 
 ### Build a simple website
 
 - [Getting started](../docs.md#simple-website)
-- [Guide: website patterns](./guide.md#website)
+- [Guide: website patterns](./guide.md#website-and-seo-patterns)
 
 ### Build a fast SPA
 
 - [Getting started](../docs.md#spa)
-- [Guide: SPA](./guide.md#spa)
+- [Guide: SPA](./guide.md#building-common-app-types)
 - [Guide: async and data patterns](./guide.md#async-and-data-patterns)
 
 ### Connect any backend
@@ -95,25 +98,6 @@ Use this page as the documentation home on GitHub.
 - `patch()`
 - `delete()`
 
-## Product Pillars
-
-### Superhuman speed
-
-Brackets is meant to reduce setup, reduce ceremony, and reduce the amount of code needed for common app work.
-
-### Superhuman reach
-
-Brackets is backend agnostic and should work with local files, SQLite, C#, Tauri, .NET, Go, Rust, Python, PHP, Ruby, Java, Node, and other backends through the same frontend contract.
-
-### Superhuman clarity
-
-The framework should stay teachable:
-
-- HTML is still HTML
-- config stays in YAML or JSON
-- app files stay normal files
-- structure grows only when the app needs it
-
 ## Documentation Map
 
 - [Getting started](../docs.md)
@@ -124,15 +108,3 @@ The framework should stay teachable:
 - [Docker](./docker.md)
 - [Release](./release.md)
 - [Agents](./agents.md)
-
-## For AI Builders
-
-If an AI is helping with Brackets, start with:
-
-- [Agents](./agents.md)
-
-Then use:
-
-- [Getting started](../docs.md)
-- [Guide](./guide.md)
-- [Reference](./reference.md)

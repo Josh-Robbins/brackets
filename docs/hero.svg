@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="640" viewBox="0 0 1200 640" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Brackets</title>
+  <desc id="desc">Brackets is a no-build, HTML-first, Datastar-powered framework.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fbf3e6"/>
+      <stop offset="1" stop-color="#f4e7d6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="112" y1="112" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f6b48f"/>
+      <stop offset="1" stop-color="#c4512c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="640" rx="40" fill="url(#bg)"/>
+  <circle cx="1040" cy="120" r="150" fill="#ffffff" fill-opacity="0.35"/>
+  <circle cx="160" cy="560" r="180" fill="#ffffff" fill-opacity="0.28"/>
+
+  <rect x="76" y="76" width="1048" height="488" rx="36" fill="#fffaf4" stroke="#e7d6c3"/>
+  <rect x="112" y="118" width="292" height="252" rx="34" fill="url(#accent)"/>
+  <rect x="140" y="146" width="236" height="196" rx="26" fill="#ffffff" fill-opacity="0.22" stroke="#ffffff" stroke-opacity="0.35"/>
+
+  <path d="M216 182H176V306H216" stroke="#1f1a17" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M300 182H340V306H300" stroke="#1f1a17" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M232 244H284" stroke="#1f1a17" stroke-width="14" stroke-linecap="round"/>
+
+  <text x="462" y="192" fill="#c4512c" font-family="Segoe UI, system-ui, sans-serif" font-size="24" letter-spacing="0.28em">SUPERHUMAN HTML FRAMEWORK</text>
+  <text x="462" y="284" fill="#1f1a17" font-family="Georgia, 'Times New Roman', serif" font-size="88" font-weight="700">[ ] Brackets</text>
+  <text x="462" y="338" fill="#6c6257" font-family="Segoe UI, system-ui, sans-serif" font-size="28">No build step. HTML first. Datastar powered.</text>
+
+  <rect x="462" y="390" width="176" height="48" rx="24" fill="#ffffff" stroke="#dfc9b3"/>
+  <text x="488" y="421" fill="#1f1a17" font-family="Segoe UI, system-ui, sans-serif" font-size="20">Fast SPAs</text>
+  <rect x="652" y="390" width="196" height="48" rx="24" fill="#ffffff" stroke="#dfc9b3"/>
+  <text x="679" y="421" fill="#1f1a17" font-family="Segoe UI, system-ui, sans-serif" font-size="20">Backend agnostic</text>
+  <rect x="864" y="390" width="184" height="48" rx="24" fill="#ffffff" stroke="#dfc9b3"/>
+  <text x="896" y="421" fill="#1f1a17" font-family="Segoe UI, system-ui, sans-serif" font-size="20">Portable apps</text>
+
+  <rect x="462" y="470" width="272" height="18" rx="9" fill="#c4512c"/>
+  <rect x="752" y="470" width="120" height="18" rx="9" fill="#d8c2aa"/>
+  <rect x="888" y="470" width="160" height="18" rx="9" fill="#ead9c8"/>
+</svg>

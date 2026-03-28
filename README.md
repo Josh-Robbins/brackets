@@ -1,8 +1,17 @@
 # Brackets
 
+![Brackets](./docs/hero.svg)
+
 Brackets is a no-build, HTML-first, Datastar-powered framework for building fast SPAs, websites, apps, and desktop-style experiences with superhuman speed.
 
 It is built for developers who want less setup, less ceremony, less code, and more momentum.
+
+## Start Here
+
+- [Docs front page](./docs/index.md)
+- [Getting started](./docs.md)
+- [Guide](./docs/guide.md)
+- [Reference](./docs/reference.md)
 
 ## Why Brackets
 

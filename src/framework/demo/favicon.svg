@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="28" fill="{{PANEL}}"/>
-  <rect x="18" y="18" width="92" height="92" rx="22" fill="{{ACCENT}}"/>
-  <path d="M56 38L34 64L56 90" stroke="{{INK}}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M72 38L94 64L72 90" stroke="{{INK}}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="64" cy="64" r="10" fill="{{INK}}"/>
+  <rect width="128" height="128" rx="30" fill="{{PANEL}}"/>
+  <rect x="14" y="14" width="100" height="100" rx="26" fill="{{ACCENT}}"/>
+  <rect x="26" y="26" width="76" height="76" rx="20" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.35)"/>
+  <path d="M52 38H40V90H52" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76 38H88V90H76" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M58 64H70" stroke="{{INK}}" stroke-width="7" stroke-linecap="round"/>
 </svg>
