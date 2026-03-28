@@ -139,6 +139,7 @@ Validate an app:
 
 ```powershell
 node src/cli.js validate demo/app
+node src/cli.js check demo/app
 ```
 
 Inspect an app:
@@ -147,6 +148,7 @@ Inspect an app:
 node src/cli.js info demo/app
 node src/cli.js routes demo/app
 node src/cli.js routes demo/app --generate
+node src/cli.js check demo/app --json
 node src/cli.js doctor demo/app
 ```
 

@@ -4,9 +4,9 @@ import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createServer } from './server.js';
 import { loadBracketsConfig } from './config.js';
-import { exportStaticSite, generateRoutes, validateApp } from './tooling.js';
+import { checkTypes, exportStaticSite, generateRoutes, validateApp } from './tooling.js';
 
-const COMMANDS = new Set(['serve', 'dev', 'validate', 'export', 'info', 'routes', 'doctor', 'help']);
+const COMMANDS = new Set(['serve', 'dev', 'validate', 'check', 'export', 'info', 'routes', 'doctor', 'help']);
 
 export function parseArgs(argv) {
   const args = [...argv];
@@ -88,6 +88,7 @@ Commands:
   serve [app-root]       Run the local Brackets host
   dev [app-root]         Alias of serve
   validate [app-root]    Validate an app
+  check [app-root]       Run no-build contract/type checks with file locations
   doctor [app-root]      Run validation plus config and host checks
   info [app-root]        Show app and host summary
   routes [app-root]      List resolved routes
@@ -111,6 +112,7 @@ Examples:
   node src/cli.js info demo/app --json
   node src/cli.js routes demo/app
   node src/cli.js routes demo/app --generate
+  node src/cli.js check demo/app --json
   node src/cli.js doctor demo/app --strict
   node src/cli.js export demo/app --out-dir dist`);
 }
@@ -392,6 +394,35 @@ async function runDoctor(options) {
   });
 }
 
+async function runCheck(options) {
+  const resolvedAppRoot = path.resolve(options.appRoot);
+  const report = await checkTypes(resolvedAppRoot);
+
+  if (options.json) {
+    printJson(report);
+  } else {
+    console.log('Brackets check');
+    console.log(`app: ${resolvedAppRoot}`);
+    console.log(`files checked: ${report.filesChecked}`);
+    console.log(`diagnostics: ${report.diagnostics.length}`);
+
+    if (report.diagnostics.length) {
+      console.log('\nType and contract diagnostics:');
+      for (const diagnostic of report.diagnostics) {
+        const location = `${diagnostic.file}:${diagnostic.line}`;
+        console.log(`- [${diagnostic.code}] ${location} ${diagnostic.message}`);
+        if (diagnostic.hint) {
+          console.log(`  hint: ${diagnostic.hint}`);
+        }
+      }
+    }
+  }
+
+  if (!report.ok) {
+    process.exitCode = 1;
+  }
+}
+
 export async function runCli(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   const resolvedAppRoot = path.resolve(options.appRoot);
@@ -413,6 +444,11 @@ export async function runCli(argv = process.argv.slice(2)) {
 
   if (options.command === 'doctor') {
     await runDoctor({ ...options, appRoot: resolvedAppRoot });
+    return;
+  }
+
+  if (options.command === 'check') {
+    await runCheck({ ...options, appRoot: resolvedAppRoot });
     return;
   }
 

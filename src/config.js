@@ -57,7 +57,7 @@ function configRootFromApp(appRoot) {
   return resolved;
 }
 
-function configCandidates(appRoot) {
+export function configCandidates(appRoot) {
   const rootDir = configRootFromApp(appRoot);
   return [
     path.join(rootDir, 'config', 'brackets.yaml'),
@@ -67,6 +67,15 @@ function configCandidates(appRoot) {
     path.join(path.resolve(appRoot), 'config', 'brackets.yml'),
     path.join(path.resolve(appRoot), 'config', 'brackets.json')
   ];
+}
+
+export function findBracketsConfigFile(appRoot) {
+  for (const filePath of configCandidates(appRoot)) {
+    if (existsSync(filePath)) {
+      return filePath;
+    }
+  }
+  return null;
 }
 
 async function readConfigFile(filePath) {

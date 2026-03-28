@@ -575,6 +575,10 @@ test('parseArgs supports the expanded CLI command surface', () => {
 
   const help = parseArgs(['help']);
   assert.equal(help.command, 'help');
+
+  const check = parseArgs(['check', 'demo/app', '--json']);
+  assert.equal(check.command, 'check');
+  assert.equal(check.json, true);
 });
 
 test('cli info, routes, and doctor expose useful output for humans and AI', async () => {
@@ -596,6 +600,47 @@ test('cli info, routes, and doctor expose useful output for humans and AI', asyn
   assert.equal(doctorPayload.appRoot.endsWith(path.join('Brackets', 'demo', 'app')), true);
   assert.equal(Array.isArray(doctorPayload.warnings), true);
   assert.equal(doctorPayload.host.distribution.installFree, true);
+});
+
+test('cli check reports no-build type diagnostics with file and line information', async () => {
+  const appRoot = await mkdtemp(path.join(tmpdir(), 'brackets-check-'));
+  const cwd = fileURLToPath(new URL('..', import.meta.url));
+  const node = process.execPath;
+
+  await mkdir(path.join(appRoot, 'config'), { recursive: true });
+  await writeFile(path.join(appRoot, 'home.view'), `page({
+  id: 'home',
+  html: './home.html',
+  params: { id: 42 }
+})`, 'utf8');
+  await writeFile(path.join(appRoot, 'home.html'), '<main><h1>Home</h1></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'config', 'brackets.json'), JSON.stringify({
+    server: { port: 'bad' }
+  }, null, 2), 'utf8');
+
+  try {
+    let stdout = '';
+    let failed = false;
+    try {
+      const result = await execFile(node, ['src/cli.js', 'check', appRoot, '--json'], { cwd });
+      stdout = result.stdout;
+    } catch (error) {
+      failed = true;
+      stdout = error.stdout;
+    }
+
+    assert.equal(failed, true);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.diagnostics.length >= 2, true);
+    assert.equal(payload.diagnostics.some((item) => item.file.endsWith(path.join('config', 'brackets.json'))), true);
+    assert.equal(payload.diagnostics.some((item) => item.file.endsWith('home.view')), true);
+    assert.equal(payload.diagnostics.every((item) => Number.isInteger(item.line) && item.line >= 1), true);
+    const viewDiagnostic = payload.diagnostics.find((item) => item.file.endsWith('home.view'));
+    assert.equal(viewDiagnostic.line, 4);
+  } finally {
+    await rm(appRoot, { recursive: true, force: true });
+  }
 });
 
 test('generateRoutes infers missing view manifests from html structure without forcing folders', async () => {

@@ -139,6 +139,13 @@ First-class runtime contracts include:
 - `config/brackets.yaml` and `config/brackets.json`
 - RPC payloads for `.api` and `.data`
 
+Use the CLI check when you want a no-build type report with file and line locations:
+
+```powershell
+node src/cli.js check demo/app
+node src/cli.js check demo/app --json
+```
+
 When something is wrong, Brackets should return structured errors, not just vague crashes.
 
 That means framework errors can include:

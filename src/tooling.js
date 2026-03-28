@@ -1,6 +1,12 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import crypto from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import { findBracketsConfigFile, loadBracketsConfig } from './config.js';
+import { BracketsContractError } from './contracts.js';
+import { validatePageManifest } from './page.js';
 import { createServer } from './server.js';
 import { transformHtmlSyntax } from './syntax.js';
 
@@ -22,6 +28,131 @@ const ROUTE_GENERATION_EXCLUDE_DIRS = new Set([
   'routes'
 ]);
 const ROUTE_STRIP_PREFIXES = ['pages/', 'views/', 'screens/'];
+
+function toModuleSource(source, extension) {
+  const trimmed = source.trim();
+  const pageImport = `import { page } from ${JSON.stringify(pathToFileURL(path.resolve('src/page.js')).href)};\n`;
+
+  if (/export\s+default/.test(trimmed) || /export\s+\{/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (extension === '.view') {
+    if (/^page\s*\(/.test(trimmed)) {
+      return `${pageImport}export default ${trimmed.replace(/;$/, '')};\n`;
+    }
+
+    return `${pageImport}export default page(${trimmed.replace(/;$/, '')});\n`;
+  }
+
+  return `export default (${trimmed.replace(/;$/, '')});\n`;
+}
+
+async function loadDefaultExport(filePath) {
+  const source = await readFile(filePath, 'utf8');
+  const wrapped = toModuleSource(source, path.extname(filePath));
+  const hash = crypto.createHash('sha1').update(filePath).update(wrapped).digest('hex');
+  const cacheDir = path.join(tmpdir(), 'brackets-tooling');
+  await mkdir(cacheDir, { recursive: true });
+  const modulePath = path.join(cacheDir, `${hash}.mjs`);
+  await writeFile(modulePath, wrapped, 'utf8');
+  const imported = await import(pathToFileURL(modulePath).href + `?t=${Date.now()}`);
+  return imported.default;
+}
+
+function issuePathTokens(issuePath = '') {
+  return [...String(issuePath).matchAll(/\.([A-Za-z_$][A-Za-z0-9_$-]*)(?:\[\d+\])?/g)].map((match) => match[1]);
+}
+
+function lineFromIndex(source, index) {
+  return source.slice(0, index).split('\n').length;
+}
+
+function locateLineForIssuePath(source, issuePath, fallback = 1) {
+  const tokens = issuePathTokens(issuePath);
+  if (!tokens.length) {
+    return fallback;
+  }
+
+  const searchToken = tokens.at(-1);
+  const fieldPattern = new RegExp(`["']?${searchToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']?\\s*:`, 'g');
+  const matches = [...source.matchAll(fieldPattern)];
+  if (!matches.length) {
+    return fallback;
+  }
+
+  if (matches.length === 1 || tokens.length === 1) {
+    return lineFromIndex(source, matches[0].index ?? 0);
+  }
+
+  for (let index = tokens.length - 2; index >= 0; index -= 1) {
+    const parentToken = tokens[index];
+    const parentPattern = new RegExp(`["']?${parentToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']?\\s*:`, 'g');
+    const parentMatch = parentPattern.exec(source);
+    if (!parentMatch) {
+      continue;
+    }
+
+    const nestedMatch = matches.find((match) => (match.index ?? 0) >= (parentMatch.index ?? 0));
+    if (nestedMatch) {
+      return lineFromIndex(source, nestedMatch.index ?? 0);
+    }
+  }
+
+  return lineFromIndex(source, matches[0].index ?? 0);
+}
+
+function createDiagnostic({ file, line = 1, column = 1, code = 'BRACKETS_CHECK', message, level = 'error', issue = null, hint = null }) {
+  return {
+    level,
+    file,
+    line,
+    column,
+    code,
+    message,
+    issue,
+    hint
+  };
+}
+
+function diagnosticsFromContractError(error, filePath, source) {
+  if (!(error instanceof BracketsContractError) || !Array.isArray(error.issues) || !error.issues.length) {
+    return [createDiagnostic({
+      file: filePath,
+      code: error.code ?? 'BRACKETS_CHECK',
+      message: error.message,
+      hint: error.hint ?? null
+    })];
+  }
+
+  return error.issues.map((issue) => {
+    const line = locateLineForIssuePath(source, issue.path);
+    return createDiagnostic({
+      file: filePath,
+      line,
+      code: error.code,
+      message: issue.message,
+      issue,
+      hint: error.hint ?? null
+    });
+  });
+}
+
+function extractRouteDefinitions(exported) {
+  if (!exported) {
+    return [];
+  }
+  if (Array.isArray(exported)) {
+    return exported;
+  }
+  if (Array.isArray(exported.routes)) {
+    return exported.routes;
+  }
+  if (typeof exported === 'object' && (exported.id || exported.route || exported.html)) {
+    return [exported];
+  }
+  return [];
+}
 
 async function withServer(appRoot, handler) {
   const instance = await createServer({
@@ -402,6 +533,78 @@ export async function validateApp(appRoot) {
       routes: routesPayload.routes
     };
   });
+}
+
+export async function checkTypes(appRoot) {
+  const resolvedAppRoot = path.resolve(appRoot);
+  const diagnostics = [];
+  let filesChecked = 0;
+
+  const configFile = findBracketsConfigFile(resolvedAppRoot);
+  if (configFile) {
+    filesChecked += 1;
+    const source = await readFile(configFile, 'utf8');
+    try {
+      await loadBracketsConfig(resolvedAppRoot);
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, configFile, source));
+    }
+  }
+
+  const frameworkFiles = await listFilesRecursive(resolvedAppRoot, '.view', {
+    excludeDirs: new Set(['node_modules', '.git', 'framework', 'config', 'tests'])
+  });
+  const routerLogicPath = path.join(resolvedAppRoot, 'router.logic');
+  const groupedRouteFiles = await listFilesRecursive(path.join(resolvedAppRoot, 'routes'), '.logic', {
+    excludeDirs: new Set(['node_modules', '.git'])
+  });
+
+  for (const filePath of frameworkFiles) {
+    filesChecked += 1;
+    const source = await readFile(filePath, 'utf8');
+    try {
+      const exported = await loadDefaultExport(filePath);
+      validatePageManifest(exported, `page manifest ${filePath}`);
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
+    }
+  }
+
+  const routeLogicFiles = [
+    ...(existsSync(routerLogicPath) ? [routerLogicPath] : []),
+    ...groupedRouteFiles
+  ];
+
+  for (const filePath of routeLogicFiles) {
+    filesChecked += 1;
+    const source = await readFile(filePath, 'utf8');
+    try {
+      const exported = await loadDefaultExport(filePath);
+      const definitions = extractRouteDefinitions(exported);
+      for (const definition of definitions) {
+        validatePageManifest(definition, `route definition ${filePath}`);
+      }
+    } catch (error) {
+      diagnostics.push(...diagnosticsFromContractError(error, filePath, source));
+    }
+  }
+
+  diagnostics.sort((left, right) => {
+    if (left.file !== right.file) {
+      return left.file.localeCompare(right.file);
+    }
+    if (left.line !== right.line) {
+      return left.line - right.line;
+    }
+    return left.message.localeCompare(right.message);
+  });
+
+  return {
+    ok: diagnostics.length === 0,
+    appRoot: resolvedAppRoot,
+    filesChecked,
+    diagnostics
+  };
 }
 
 function outputPathForRoute(outDir, route) {
