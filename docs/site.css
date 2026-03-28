@@ -100,8 +100,8 @@ a {
 }
 
 .brand-mark {
-  width: 3.55rem;
-  height: 3.1rem;
+  width: 3rem;
+  height: 2.62rem;
   display: inline-block;
   filter: drop-shadow(0 20px 40px rgba(36, 16, 19, 0.18));
 }
@@ -396,8 +396,8 @@ a {
 }
 
 .rail-mark {
-  width: 3.45rem;
-  height: 3.05rem;
+  width: 3rem;
+  height: 2.62rem;
   display: inline-block;
   filter: drop-shadow(0 18px 36px rgba(36, 16, 19, 0.16));
 }
