@@ -113,18 +113,10 @@ a {
 }
 
 .mark-svg {
-  width: 1.18rem;
-  height: 0.92rem;
+  width: 1.28rem;
+  height: 1rem;
   overflow: visible;
-  transform: translateY(0.18rem);
-}
-
-.mark-svg path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  transform: translateY(0.16rem);
 }
 
 .inline-mark {
@@ -135,9 +127,9 @@ a {
 }
 
 .inline-mark .mark-svg {
-  width: 1em;
-  height: 0.78em;
-  transform: translateY(0.06em);
+  width: 1.02em;
+  height: 0.82em;
+  transform: translateY(0.05em);
 }
 
 .brand-copy {
