@@ -3,7 +3,4 @@
   <rect width="128" height="128" rx="30" fill="#fffaf4"/>
   <path d="M46 20H82L104 44L64 100L24 44L46 20Z" fill="#714cb6"/>
   <path d="M50 28H78L94 46L64 88L34 46L50 28Z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.34)"/>
-  <path d="M53 40H42V72H53" stroke="#241013" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M75 40H86V72H75" stroke="#241013" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M58 56H70" stroke="#241013" stroke-width="7" stroke-linecap="round"/>
 </svg>

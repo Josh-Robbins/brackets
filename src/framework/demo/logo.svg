@@ -27,8 +27,8 @@
     <circle cx="162" cy="130" r="28" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
   </g>
 
-  <text x="316" y="86" fill="{{ACCENT}}" font-family="Segoe UI, system-ui, sans-serif" font-size="18" letter-spacing="0.28em">SUPERHUMAN HTML FRAMEWORK</text>
-  <text x="316" y="150" fill="{{INK}}" font-family="Georgia, 'Times New Roman', serif" font-size="64" font-weight="700">[ ] {{NAME}}</text>
+  <text x="316" y="86" fill="{{ACCENT}}" font-family="Segoe UI, system-ui, sans-serif" font-size="18" letter-spacing="0.28em">SUPERPOWERFUL HTML FRAMEWORK</text>
+  <text x="316" y="150" fill="{{INK}}" font-family="'League Spartan', 'Segoe UI', system-ui, sans-serif" font-size="64" font-weight="700" letter-spacing="-0.04em">[ ] {{NAME}}</text>
   <text x="316" y="194" fill="{{MUTED}}" font-family="Segoe UI, system-ui, sans-serif" font-size="24">{{TAGLINE}}</text>
 
   <path d="M316 214H566" stroke="{{ACCENT}}" stroke-width="6" stroke-linecap="round"/>
