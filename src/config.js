@@ -29,7 +29,7 @@ export const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     hints: [
       'Edit files in app/',
       'Adjust settings in config/brackets.json or config/brackets.yaml',
-      'Use framework/docs.md and framework/agents.md when you need help'
+      'Use the hosted docs and agents guide when you need help'
     ]
   },
   security: {
