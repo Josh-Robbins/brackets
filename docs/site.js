@@ -11,6 +11,8 @@ function attachHeroParallax() {
   }
 
   const app = scene.querySelector('.scene-app');
+  const windowFrame = scene.querySelector('.scene-window');
+  const cards = [...scene.querySelectorAll('.scene-card')];
   const glowA = scene.querySelector('.scene-glow-a');
   const glowB = scene.querySelector('.scene-glow-b');
   const cardA = scene.querySelector('.floating-card-a');
@@ -20,60 +22,77 @@ function attachHeroParallax() {
     return;
   }
 
-  let pointerX = 0;
-  let pointerY = 0;
+  let targetX = 0;
+  let targetY = 0;
+  let currentX = 0;
+  let currentY = 0;
   let pointerActive = false;
 
+  const setPointerFromEvent = (event) => {
+    const rect = scene.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width;
+    const y = (event.clientY - rect.top) / rect.height;
+    targetX = Math.max(-1, Math.min(1, (x - 0.5) * 2));
+    targetY = Math.max(-1, Math.min(1, (y - 0.5) * 2));
+    pointerActive = true;
+  };
+
+  const clearPointer = () => {
+    pointerActive = false;
+  };
+
   const render = (time) => {
-    const driftX = Math.sin(time / 1800) * 0.32;
-    const driftY = Math.cos(time / 2200) * 0.22;
-    const activeX = pointerActive ? pointerX : 0;
-    const activeY = pointerActive ? pointerY : 0;
+    const driftX = Math.sin(time / 1700) * 0.18;
+    const driftY = Math.cos(time / 2100) * 0.12;
 
-    const targetX = driftX + activeX * 0.75;
-    const targetY = driftY + activeY * 0.75;
+    const desiredX = (pointerActive ? targetX * 0.9 : 0) + driftX;
+    const desiredY = (pointerActive ? targetY * 0.8 : 0) + driftY;
 
-    const rotateY = -8 + targetX * 8;
-    const rotateX = 5 - targetY * 7;
-    const shiftX = targetX * 16;
-    const shiftY = targetY * 14;
+    currentX += (desiredX - currentX) * 0.08;
+    currentY += (desiredY - currentY) * 0.08;
+
+    const appRotateY = -8 + currentX * 12;
+    const appRotateX = 5 - currentY * 10;
+    const appShiftX = currentX * 22;
+    const appShiftY = currentY * 18;
 
     app.style.transform =
-      `perspective(1400px) translate3d(${shiftX}px, ${shiftY}px, 0) rotateY(${rotateY}deg) rotateX(${rotateX}deg)`;
+      `perspective(1400px) translate3d(${appShiftX}px, ${appShiftY}px, 0) rotateY(${appRotateY}deg) rotateX(${appRotateX}deg)`;
+
+    if (windowFrame) {
+      windowFrame.style.transform =
+        `translate3d(${currentX * -6}px, ${currentY * -6}px, 14px)`;
+    }
+
+    cards.forEach((card, index) => {
+      const depth = 8 + index * 4;
+      const shift = 4 + index * 1.5;
+      card.style.transform =
+        `translate3d(${currentX * shift}px, ${currentY * shift}px, ${depth}px)`;
+    });
 
     if (cardA) {
-      cardA.style.translate = `${targetX * -18}px ${targetY * -16}px`;
+      cardA.style.translate = `${currentX * -26}px ${currentY * -24}px`;
     }
 
     if (cardB) {
-      cardB.style.translate = `${targetX * 22}px ${targetY * 18}px`;
+      cardB.style.translate = `${currentX * 30}px ${currentY * 26}px`;
     }
 
     if (glowA) {
-      glowA.style.translate = `${targetX * 18}px ${targetY * 12}px`;
+      glowA.style.translate = `${currentX * 30}px ${currentY * 20}px`;
     }
 
     if (glowB) {
-      glowB.style.translate = `${targetX * -16}px ${targetY * -10}px`;
+      glowB.style.translate = `${currentX * -24}px ${currentY * -18}px`;
     }
 
     requestAnimationFrame(render);
   };
 
-  scene.addEventListener('pointermove', (event) => {
-    const rect = scene.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width;
-    const y = (event.clientY - rect.top) / rect.height;
-    pointerX = (x - 0.5) * 2;
-    pointerY = (y - 0.5) * 2;
-    pointerActive = true;
-  });
-
-  scene.addEventListener('pointerleave', () => {
-    pointerActive = false;
-    pointerX = 0;
-    pointerY = 0;
-  });
+  scene.addEventListener('pointerenter', setPointerFromEvent);
+  scene.addEventListener('pointermove', setPointerFromEvent);
+  scene.addEventListener('pointerleave', clearPointer);
 
   requestAnimationFrame(render);
 }

@@ -343,8 +343,8 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.76);
   box-shadow: var(--shadow-large);
   transform: perspective(1400px) rotateY(-8deg) rotateX(5deg);
+  transform-origin: center center;
   transform-style: preserve-3d;
-  transition: transform 220ms ease;
   will-change: transform;
 }
 
@@ -369,6 +369,7 @@ a {
   border-radius: 1rem;
   background: var(--panel-strong);
   border: 1px solid rgba(115, 113, 109, 0.14);
+  transform: translateZ(0);
 }
 
 .scene-rail {
@@ -414,6 +415,7 @@ a {
   border: 1px solid rgba(115, 113, 109, 0.14);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 18px 40px -28px rgba(36, 16, 19, 0.22);
+  transform: translateZ(0);
 }
 
 .scene-card-hero {
@@ -476,7 +478,6 @@ a {
   box-shadow: 0 22px 52px -34px rgba(36, 16, 19, 0.28);
   backdrop-filter: blur(14px);
   animation: bob 4.8s ease-in-out infinite;
-  transition: translate 220ms ease;
   will-change: transform, translate;
 }
 
@@ -600,7 +601,7 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .scene-app,
   .floating-card {
-    transition: none;
+    animation: none;
   }
 }
 
