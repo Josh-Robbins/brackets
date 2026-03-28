@@ -20,15 +20,21 @@ function attachHeroParallax() {
     return;
   }
 
-  let raf = 0;
-  let targetX = 0;
-  let targetY = 0;
+  let pointerX = 0;
+  let pointerY = 0;
+  let pointerActive = false;
 
-  const paint = () => {
-    raf = 0;
+  const render = (time) => {
+    const driftX = Math.sin(time / 1800) * 0.32;
+    const driftY = Math.cos(time / 2200) * 0.22;
+    const activeX = pointerActive ? pointerX : 0;
+    const activeY = pointerActive ? pointerY : 0;
 
-    const rotateY = -8 + targetX * 7;
-    const rotateX = 5 - targetY * 6;
+    const targetX = driftX + activeX * 0.75;
+    const targetY = driftY + activeY * 0.75;
+
+    const rotateY = -8 + targetX * 8;
+    const rotateX = 5 - targetY * 7;
     const shiftX = targetX * 16;
     const shiftY = targetY * 14;
 
@@ -50,28 +56,26 @@ function attachHeroParallax() {
     if (glowB) {
       glowB.style.translate = `${targetX * -16}px ${targetY * -10}px`;
     }
-  };
 
-  const schedule = () => {
-    if (!raf) {
-      raf = requestAnimationFrame(paint);
-    }
+    requestAnimationFrame(render);
   };
 
   scene.addEventListener('pointermove', (event) => {
     const rect = scene.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
     const y = (event.clientY - rect.top) / rect.height;
-    targetX = (x - 0.5) * 2;
-    targetY = (y - 0.5) * 2;
-    schedule();
+    pointerX = (x - 0.5) * 2;
+    pointerY = (y - 0.5) * 2;
+    pointerActive = true;
   });
 
   scene.addEventListener('pointerleave', () => {
-    targetX = 0;
-    targetY = 0;
-    schedule();
+    pointerActive = false;
+    pointerX = 0;
+    pointerY = 0;
   });
+
+  requestAnimationFrame(render);
 }
 
 if (document.readyState === 'loading') {

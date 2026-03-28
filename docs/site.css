@@ -268,7 +268,7 @@ a {
 .hero-stats {
   margin-top: 1.55rem;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.9rem;
 }
 
@@ -423,8 +423,7 @@ a {
     radial-gradient(circle at top right, rgba(212, 199, 255, 0.24), transparent 36%);
 }
 
-.scene-card-top,
-.scene-actions {
+.scene-card-top {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
@@ -464,28 +463,6 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
-}
-
-.scene-grid .wide {
-  grid-column: 1 / -1;
-}
-
-.mini-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.45rem;
-  padding: 0.6rem 0.92rem;
-  border-radius: 0.62rem;
-  background: rgba(36, 16, 19, 0.06);
-  border: 1px solid rgba(36, 16, 19, 0.08);
-  font-weight: 600;
-}
-
-.mini-button.warm {
-  background: var(--accent);
-  border-color: transparent;
-  color: #fcfaf7;
 }
 
 .floating-card {
@@ -529,10 +506,6 @@ a {
   margin-top: 1.6rem;
   display: grid;
   gap: 1rem;
-}
-
-.section-grid-three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .section-grid-two {
