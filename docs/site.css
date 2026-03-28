@@ -303,9 +303,10 @@ a {
 
 .hero-scene {
   position: relative;
-  min-height: 42rem;
+  min-height: 40rem;
   display: grid;
   place-items: center;
+  perspective: 1600px;
 }
 
 .scene-glow {
@@ -335,13 +336,16 @@ a {
 .scene-app {
   position: relative;
   z-index: 2;
-  width: min(100%, 40.5rem);
-  padding: 1rem;
+  width: min(100%, 37.75rem);
+  padding: 0.85rem;
   border-radius: 1.2rem;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.56));
   border: 1px solid rgba(255, 255, 255, 0.76);
   box-shadow: var(--shadow-large);
   transform: perspective(1400px) rotateY(-8deg) rotateX(5deg);
+  transform-style: preserve-3d;
+  transition: transform 220ms ease;
+  will-change: transform;
 }
 
 .scene-toolbar {
@@ -360,8 +364,8 @@ a {
 .scene-window {
   display: grid;
   grid-template-columns: 4.8rem minmax(0, 1fr);
-  gap: 1rem;
-  padding: 1rem;
+  gap: 0.85rem;
+  padding: 0.85rem;
   border-radius: 1rem;
   background: var(--panel-strong);
   border: 1px solid rgba(115, 113, 109, 0.14);
@@ -401,11 +405,11 @@ a {
 
 .scene-content {
   display: grid;
-  gap: 0.9rem;
+  gap: 0.75rem;
 }
 
 .scene-card {
-  padding: 1rem;
+  padding: 0.88rem;
   border-radius: 0.95rem;
   border: 1px solid rgba(115, 113, 109, 0.14);
   background: rgba(255, 255, 255, 0.92);
@@ -413,7 +417,7 @@ a {
 }
 
 .scene-card-hero {
-  padding: 1.15rem;
+  padding: 1rem;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.9)),
     radial-gradient(circle at top right, rgba(212, 199, 255, 0.24), transparent 36%);
@@ -459,7 +463,7 @@ a {
 .scene-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.8rem;
+  gap: 0.7rem;
 }
 
 .scene-grid .wide {
@@ -487,14 +491,16 @@ a {
 .floating-card {
   position: absolute;
   z-index: 3;
-  width: 15rem;
-  padding: 0.95rem 1rem;
+  width: 14.25rem;
+  padding: 0.88rem 0.95rem;
   border-radius: 0.95rem;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--line);
   box-shadow: 0 22px 52px -34px rgba(36, 16, 19, 0.28);
   backdrop-filter: blur(14px);
   animation: bob 4.8s ease-in-out infinite;
+  transition: translate 220ms ease;
+  will-change: transform, translate;
 }
 
 .floating-card span {
@@ -509,13 +515,13 @@ a {
 }
 
 .floating-card-a {
-  top: 6rem;
-  right: -0.5rem;
+  top: 5.2rem;
+  right: 0.1rem;
 }
 
 .floating-card-b {
-  left: -0.75rem;
-  bottom: 4rem;
+  left: -0.15rem;
+  bottom: 3.4rem;
   animation-delay: -2.4s;
 }
 
@@ -615,6 +621,13 @@ code {
 
   .floating-card-b {
     left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-app,
+  .floating-card {
+    transition: none;
   }
 }
 
