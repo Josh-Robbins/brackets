@@ -256,6 +256,18 @@ a {
   background: var(--accent-strong);
 }
 
+.button-secondary {
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  border: 1px solid rgba(36, 16, 19, 0.14);
+  box-shadow: 0 18px 32px -24px rgba(36, 16, 19, 0.24);
+}
+
+.button-secondary:hover {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(113, 76, 182, 0.3);
+}
+
 .button-soft {
   background: transparent;
   color: var(--ink);
@@ -269,6 +281,14 @@ a {
 
 .hero-chips {
   margin-top: 1.25rem;
+}
+
+.download-note {
+  margin: 0.9rem 0 0;
+  max-width: 36rem;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.6;
 }
 
 .hero-chips span {

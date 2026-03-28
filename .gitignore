@@ -1,6 +1,7 @@
 node_modules/
 dist/
 static-out/
+release/
 .DS_Store
 Thumbs.db
 demo/*.log

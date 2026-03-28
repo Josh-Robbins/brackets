@@ -1,0 +1,21 @@
+{
+  "version": "v0.95",
+  "universal": true,
+  "downloads": {
+    "windows": {
+      "label": "Windows",
+      "href": "./downloads/Brackets-v0.95-windows.zip",
+      "sha256": "D6EF626DE21745BA168F501D444033F3E3117DD756FEE4A893DFF58CA24C2797"
+    },
+    "macos": {
+      "label": "macOS",
+      "href": "./downloads/Brackets-v0.95-macos.zip",
+      "sha256": "D6EF626DE21745BA168F501D444033F3E3117DD756FEE4A893DFF58CA24C2797"
+    },
+    "linux": {
+      "label": "Linux",
+      "href": "./downloads/Brackets-v0.95-linux.zip",
+      "sha256": "D6EF626DE21745BA168F501D444033F3E3117DD756FEE4A893DFF58CA24C2797"
+    }
+  }
+}
