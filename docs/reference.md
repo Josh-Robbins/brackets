@@ -96,6 +96,25 @@ Additive router powers that do not change Brackets syntax:
 | `api` | no | named remote dependencies |
 | `data` | no | named local-data dependencies |
 
+### No-build type safety
+
+Brackets does not depend on a build step for type safety.
+
+Instead, important framework contracts are validated at runtime:
+
+- `page()` manifests
+- `config/brackets.yaml` / `config/brackets.json`
+- RPC payloads for `.api` and `.data`
+
+Structured framework errors should prefer:
+
+- `error` for the main message
+- `code` for stable programmatic handling
+- `issues` for field-level contract failures
+- `hint` for the next corrective step
+
+This keeps no-build authoring simple while still making bad shapes fail early and clearly.
+
 ### Context
 
 | Group | Purpose |

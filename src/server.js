@@ -5,10 +5,11 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { BracketsError, createIssue, throwContractIssues } from './contracts.js';
 import { transformHtmlSyntax } from './syntax.js';
 import { buildFrameworkFaviconSvg, buildFrameworkLogoSvg, loadBracketsConfig } from './config.js';
 import { closeStorageAdapters, createStorageHelpers } from './data-adapters.js';
-import { PAGE_MANIFEST_SCHEMA } from './page.js';
+import { PAGE_MANIFEST_SCHEMA, validatePageManifest } from './page.js';
 
 const MODULE_EXTENSIONS = new Set(['.view', '.logic', '.api', '.data']);
 const RPC_PREFIXES = {
@@ -391,15 +392,10 @@ function normalizeRouteDefinition(definition, sourcePath, appRoot, options = {})
     throw new Error(`Brackets route definition in ${sourcePath} must be an object`);
   }
 
-  const mergedDefinition = mergeRouteDefaults(options.defaults, definition);
-
-  if (typeof mergedDefinition.id !== 'string' || !mergedDefinition.id.trim()) {
-    throw new Error(`Brackets route definition in ${sourcePath} requires a non-empty id`);
-  }
-
-  if (typeof mergedDefinition.html !== 'string' || !mergedDefinition.html.trim()) {
-    throw new Error(`Brackets route definition "${mergedDefinition.id}" in ${sourcePath} requires a non-empty html reference`);
-  }
+  const mergedDefinition = validatePageManifest(
+    mergeRouteDefaults(options.defaults, definition),
+    `Brackets route definition in ${sourcePath}`
+  );
 
   const sourceDir = path.dirname(sourcePath);
   const resolveMaybe = (specifier) => {
@@ -1376,29 +1372,37 @@ function isSameOriginRequest(req, serverOrigin) {
 
 function validateRpcPayload(payload) {
   const { kind, moduleUrl, method, args = [] } = payload ?? {};
+  const issues = [];
+
   if (!['api', 'data'].includes(kind)) {
-    throw new HttpError(400, `Unsupported RPC kind ${kind}`);
+    issues.push(createIssue('rpc.kind', '"api" or "data"', JSON.stringify(kind)));
   }
 
   if (typeof method !== 'string' || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(method)) {
-    throw new HttpError(400, `Invalid RPC method ${method}`);
+    issues.push(createIssue('rpc.method', 'a valid exported method name', JSON.stringify(method)));
   }
 
-  if (typeof moduleUrl !== 'string' || !moduleUrl.startsWith(RPC_PREFIXES[kind])) {
-    throw new HttpError(400, `Invalid RPC module ${moduleUrl}`);
-  }
+  if (typeof moduleUrl !== 'string' || (kind && !moduleUrl.startsWith(RPC_PREFIXES[kind] ?? ''))) {
+    issues.push(createIssue('rpc.moduleUrl', 'a valid Brackets RPC module path', JSON.stringify(moduleUrl)));
+  } else {
+    if (kind === 'api' && !moduleUrl.endsWith('.api')) {
+      issues.push(createIssue('rpc.moduleUrl', 'a .api module path', JSON.stringify(moduleUrl)));
+    }
 
-  if (kind === 'api' && !moduleUrl.endsWith('.api')) {
-    throw new HttpError(400, `API RPC modules must end in .api: ${moduleUrl}`);
-  }
-
-  if (kind === 'data' && !moduleUrl.endsWith('.data')) {
-    throw new HttpError(400, `Data RPC modules must end in .data: ${moduleUrl}`);
+    if (kind === 'data' && !moduleUrl.endsWith('.data')) {
+      issues.push(createIssue('rpc.moduleUrl', 'a .data module path', JSON.stringify(moduleUrl)));
+    }
   }
 
   if (!Array.isArray(args)) {
-    throw new HttpError(400, 'RPC args must be an array');
+    issues.push(createIssue('rpc.args', 'an array', typeof args));
   }
+
+  throwContractIssues('Brackets RPC payload is invalid', issues, {
+    code: 'BRACKETS_RPC_INVALID',
+    statusCode: 400,
+    hint: 'RPC requests must target /app/api/*.api or /app/data/*.data and pass args as an array.'
+  });
 }
 
 async function invokeRpc(appRoot, payload, serverOrigin, authState) {
@@ -1777,9 +1781,15 @@ export async function createServer({
       send(res, 404, 'text/plain; charset=utf-8', 'Not found');
     } catch (error) {
       const statusCode = error?.statusCode ?? 500;
-      send(res, statusCode, 'application/json; charset=utf-8', json({
+      const payload = {
         error: error.message
-      }));
+      };
+      if (error instanceof BracketsError) {
+        payload.code = error.code;
+        payload.issues = error.issues;
+        payload.hint = error.hint;
+      }
+      send(res, statusCode, 'application/json; charset=utf-8', json(payload));
     }
   });
 

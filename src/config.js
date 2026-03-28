@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { validateBracketsConfig } from './contracts.js';
 import { parseYaml } from './data-adapters.js';
 
 const FRAMEWORK_DEMO_DIR = path.resolve('src/framework/demo');
@@ -71,12 +72,13 @@ function configCandidates(appRoot) {
 async function readConfigFile(filePath) {
   const source = await readFile(filePath, 'utf8');
   if (filePath.endsWith('.json')) {
-    return JSON.parse(source);
+    return validateBracketsConfig(JSON.parse(source), `Brackets config ${filePath}`);
   }
-  return parseYaml(source);
+  return validateBracketsConfig(parseYaml(source), `Brackets config ${filePath}`);
 }
 
 function normalizeConfig(config, appRoot) {
+  validateBracketsConfig(config, 'Brackets config');
   const merged = deepMerge(DEFAULT_BRACKETS_CONFIG, config ?? {});
   merged.branding.name ||= path.basename(configRootFromApp(appRoot));
   merged.branding.title ||= `${merged.branding.name} is ready`;

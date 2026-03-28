@@ -1,3 +1,5 @@
+import { validatePageManifestContract } from './contracts.js';
+
 export const PAGE_MANIFEST_FIELDS = [
   'id',
   'html',
@@ -17,8 +19,6 @@ export const PAGE_MANIFEST_FIELDS = [
   'api',
   'data'
 ];
-
-const ALLOWED_FIELDS = new Set(PAGE_MANIFEST_FIELDS);
 
 export const PAGE_MANIFEST_SCHEMA = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -117,14 +117,11 @@ export const PAGE_MANIFEST_SCHEMA = {
   }
 };
 
-function assertRecord(value, name) {
-  if (value === undefined || value === null) {
-    return;
-  }
-
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Brackets page.${name} must be an object when provided`);
-  }
+export function validatePageManifest(definition, context = 'Brackets page()') {
+  return validatePageManifestContract(definition, {
+    context,
+    allowedFields: PAGE_MANIFEST_FIELDS
+  });
 }
 
 export function page(definition) {
@@ -132,7 +129,7 @@ export function page(definition) {
     throw new Error('Brackets page() requires an object definition');
   }
 
-  const unknown = Object.keys(definition).filter((key) => !ALLOWED_FIELDS.has(key));
+  const unknown = Object.keys(definition).filter((key) => !PAGE_MANIFEST_FIELDS.includes(key));
   if (unknown.length) {
     throw new Error(`Brackets page() received unknown field(s): ${unknown.join(', ')}`);
   }
@@ -145,23 +142,7 @@ export function page(definition) {
     throw new Error(`Brackets page("${definition.id}") requires a non-empty html reference`);
   }
 
-  for (const field of ['logic', 'route', 'alias', 'redirectTo', 'preload', 'title', 'layout']) {
-    if (definition[field] !== undefined && typeof definition[field] !== 'string') {
-      throw new Error(`Brackets page("${definition.id}").${field} must be a string when provided`);
-    }
-  }
-
-  if (definition.aliases !== undefined) {
-    if (!Array.isArray(definition.aliases) || definition.aliases.some((value) => typeof value !== 'string')) {
-      throw new Error(`Brackets page("${definition.id}").aliases must be an array of strings when provided`);
-    }
-  }
-
-  for (const field of ['params', 'meta', 'seo', 'auth', 'assets', 'api', 'data']) {
-    assertRecord(definition[field], field);
-  }
-
   return {
-    ...definition
+    ...validatePageManifest(definition)
   };
 }

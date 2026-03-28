@@ -121,6 +121,40 @@ The startup page is meant to feel alive and reassuring: clear readiness status, 
 - `sanitize` for the safe default
 - `trusted` only when the app intentionally wants raw HTML insertion
 
+## Type safety without a build step
+
+Brackets treats type safety as a runtime framework feature.
+
+That matters because Brackets is intentionally:
+
+- no build step
+- portable-folder first
+- backend agnostic
+
+So instead of depending on a compile step to catch bad shapes, Brackets validates important contracts when they are loaded and used.
+
+First-class runtime contracts include:
+
+- `page()` manifests
+- `config/brackets.yaml` and `config/brackets.json`
+- RPC payloads for `.api` and `.data`
+
+When something is wrong, Brackets should return structured errors, not just vague crashes.
+
+That means framework errors can include:
+
+- `error`
+- `code`
+- `issues`
+- `hint`
+
+This is the no-build tradeoff done the right way:
+
+- keep authoring simple
+- keep syntax locked
+- keep Datastar as the engine
+- still fail early with useful contract errors
+
 ## Plugins and extensions
 
 Brackets does not need a framework-owned plugin API.

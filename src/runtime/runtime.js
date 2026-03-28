@@ -1324,10 +1324,17 @@ export class BracketsApp {
   createTransportError(response, payload) {
     const message = typeof payload === 'string' && payload.trim()
       ? payload.trim()
-      : `Request failed with status ${response.status}`;
+      : payload?.error?.trim?.()
+        ? payload.error.trim()
+        : `Request failed with status ${response.status}`;
     const error = new Error(message);
     error.status = response.status;
     error.payload = payload;
+    if (payload && typeof payload === 'object') {
+      error.code = payload.code ?? null;
+      error.issues = Array.isArray(payload.issues) ? payload.issues : [];
+      error.hint = payload.hint ?? null;
+    }
     return error;
   }
 

@@ -11,6 +11,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../src/cli.js';
 import { loadBracketsConfig } from '../src/config.js';
+import { BRACKETS_CONFIG_SCHEMA, validateBracketsConfig } from '../src/contracts.js';
 import { closeStorageAdapters, createStorageHelpers } from '../src/data-adapters.js';
 import { PAGE_MANIFEST_FIELDS, PAGE_MANIFEST_SCHEMA, page } from '../src/page.js';
 import { BracketsApp, buildNavigationPlan, canRegisterServiceWorker, createLocationSnapshot, evaluateFrameworkExpression, normalizeRouterRedirect, parseRoute, sanitizeHtmlFragment } from '../src/runtime/runtime.js';
@@ -153,10 +154,49 @@ test('page validates required manifest fields and allowed keys', () => {
   assert.deepEqual(manifest.aliases, ['/welcome']);
 });
 
+test('page reports structured contract issues for nested type errors', () => {
+  assert.throws(
+    () => page({
+      id: 'home',
+      html: '@pages/home.html',
+      params: { id: 42 },
+      api: { remote: true }
+    }),
+    (error) => {
+      assert.equal(error.code, 'BRACKETS_PAGE_INVALID');
+      assert.equal(Array.isArray(error.issues), true);
+      assert.match(error.hint, /page manifest/i);
+      assert.equal(error.issues.some((issue) => issue.path.endsWith('.params.id')), true);
+      assert.equal(error.issues.some((issue) => issue.path.endsWith('.api.remote')), true);
+      return true;
+    }
+  );
+});
+
 test('page manifest schema stays aligned with the public manifest fields', () => {
   assert.deepEqual(Object.keys(PAGE_MANIFEST_SCHEMA.properties), PAGE_MANIFEST_FIELDS);
   assert.deepEqual(PAGE_MANIFEST_SCHEMA.required, ['id', 'html']);
   assert.equal(PAGE_MANIFEST_SCHEMA.additionalProperties, false);
+});
+
+test('config schema and validation keep no-build config type-safe', () => {
+  assert.equal(BRACKETS_CONFIG_SCHEMA.properties.server.properties.port.minimum, 1);
+
+  assert.throws(
+    () => validateBracketsConfig({
+      server: { port: '4173' },
+      splash: { enabled: 'yes' },
+      security: { html: 'unsafe' }
+    }, 'Brackets test config'),
+    (error) => {
+      assert.equal(error.code, 'BRACKETS_CONFIG_INVALID');
+      assert.equal(Array.isArray(error.issues), true);
+      assert.equal(error.issues.some((issue) => issue.path.endsWith('.server.port')), true);
+      assert.equal(error.issues.some((issue) => issue.path.endsWith('.splash.enabled')), true);
+      assert.equal(error.issues.some((issue) => issue.path.endsWith('.security.html')), true);
+      return true;
+    }
+  );
 });
 
 test('loadBracketsConfig supports sibling config in json or yaml form', async () => {
@@ -182,6 +222,33 @@ test('loadBracketsConfig supports sibling config in json or yaml form', async ()
     assert.equal(config.server.port, 4455);
     assert.equal(config.branding.tagline, 'YAML config works');
     assert.equal(config.security.html, 'sanitize');
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('loadBracketsConfig fails with structured issues for invalid config types', async () => {
+  const rootDir = await mkdtemp(path.join(tmpdir(), 'brackets-config-invalid-'));
+  const appRoot = path.join(rootDir, 'app');
+  const configDir = path.join(rootDir, 'config');
+
+  await mkdir(appRoot, { recursive: true });
+  await mkdir(configDir, { recursive: true });
+  await writeFile(path.join(configDir, 'brackets.json'), JSON.stringify({
+    server: { port: 'bad' },
+    splash: { chips: [1, 2] }
+  }, null, 2), 'utf8');
+
+  try {
+    await assert.rejects(
+      loadBracketsConfig(appRoot),
+      (error) => {
+        assert.equal(error.code, 'BRACKETS_CONFIG_INVALID');
+        assert.equal(error.issues.some((issue) => issue.path.includes('.server.port')), true);
+        assert.equal(error.issues.some((issue) => issue.path.includes('.splash.chips[0]')), true);
+        return true;
+      }
+    );
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -956,7 +1023,10 @@ test('server rejects proxy targets with embedded credentials and invalid rpc arg
     });
     assert.equal(invalidArgs.status, 400);
     const payload = await invalidArgs.json();
-    assert.match(payload.error, /args must be an array/i);
+    assert.equal(payload.code, 'BRACKETS_RPC_INVALID');
+    assert.equal(Array.isArray(payload.issues), true);
+    assert.match(payload.hint, /args as an array/i);
+    assert.equal(payload.issues.some((issue) => issue.path === 'rpc.args'), true);
   } finally {
     await app.close();
   }
@@ -1418,6 +1488,19 @@ test('reference documents html trust policy and Datastar-first helper compilatio
   ]) {
     assert.match(reference, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+});
+
+test('docs describe no-build runtime type safety and structured framework errors', async () => {
+  const [docs, reference] = await Promise.all([
+    readFile(new URL('../docs.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/reference.md', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(docs, /Type safety without a build step/i);
+  assert.match(docs, /structured errors/i);
+  assert.match(reference, /No-build type safety/i);
+  assert.match(reference, /`issues`/);
+  assert.match(reference, /`hint`/);
 });
 
 test('reference keeps the canonical framework summary intact', async () => {
