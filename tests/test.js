@@ -1,15 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { execFile as execFileCallback } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from '../src/cli.js';
 import { loadBracketsConfig } from '../src/config.js';
 import { PAGE_MANIFEST_FIELDS, PAGE_MANIFEST_SCHEMA, page } from '../src/page.js';
-import { BracketsApp, buildNavigationPlan, canRegisterServiceWorker, createLocationSnapshot, evaluateFrameworkExpression, parseRoute, sanitizeHtmlFragment } from '../src/runtime/runtime.js';
+import { BracketsApp, buildNavigationPlan, canRegisterServiceWorker, createLocationSnapshot, evaluateFrameworkExpression, normalizeRouterRedirect, parseRoute, sanitizeHtmlFragment } from '../src/runtime/runtime.js';
 import { createServer } from '../src/server.js';
-import { exportStaticSite, validateApp } from '../src/tooling.js';
+import { exportStaticSite, generateRoutes, validateApp } from '../src/tooling.js';
 import { SYNTAX_CONTRACT, transformDatastarExpression, transformHtmlSyntax } from '../src/syntax.js';
+
+const execFile = promisify(execFileCallback);
 
 async function getSessionHeaders(baseUrl) {
   const response = await fetch(`${baseUrl}/__brackets/session`);
@@ -110,6 +118,11 @@ test('page validates required manifest fields and allowed keys', () => {
   const manifest = page({
     id: 'home',
     html: '@pages/home.html',
+    alias: '/start',
+    aliases: ['/welcome'],
+    params: { id: '^[0-9]+$' },
+    redirectTo: '/dashboard',
+    preload: 'idle',
     title: 'Home',
     meta: { description: 'Demo' },
     seo: { changefreq: 'daily' },
@@ -121,6 +134,7 @@ test('page validates required manifest fields and allowed keys', () => {
 
   assert.equal(manifest.id, 'home');
   assert.equal(manifest.html, '@pages/home.html');
+  assert.deepEqual(manifest.aliases, ['/welcome']);
 });
 
 test('page manifest schema stays aligned with the public manifest fields', () => {
@@ -151,6 +165,7 @@ test('loadBracketsConfig supports sibling config in json or yaml form', async ()
     assert.match(filePath, /brackets\.ya?ml$/);
     assert.equal(config.server.port, 4455);
     assert.equal(config.branding.tagline, 'YAML config works');
+    assert.equal(config.security.html, 'sanitize');
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
@@ -159,6 +174,19 @@ test('loadBracketsConfig supports sibling config in json or yaml form', async ()
 test('parseRoute decodes named params', () => {
   assert.deepEqual(parseRoute('/contacts/:id', '/contacts/a%20b'), { id: 'a b' });
   assert.equal(parseRoute('/contacts/:id', '/projects/1'), null);
+  assert.deepEqual(parseRoute('/docs/*slug', '/docs/guides/router/intro'), { slug: 'guides/router/intro' });
+});
+
+test('normalizeRouterRedirect accepts string and object redirect results', () => {
+  assert.deepEqual(normalizeRouterRedirect('/login'), {
+    path: '/login',
+    replace: true
+  });
+  assert.deepEqual(normalizeRouterRedirect({ redirectTo: '/dashboard', replace: false }), {
+    path: '/dashboard',
+    replace: false
+  });
+  assert.equal(normalizeRouterRedirect({ title: 'No redirect' }), null);
 });
 
 test('createLocationSnapshot captures SPA path parts', () => {
@@ -254,6 +282,28 @@ test('buildNavigationPlan remounts layout and page when layout changes', () => {
   });
 });
 
+test('matchRoute respects additive route param validation', () => {
+  const app = new BracketsApp({
+    routes: [
+      {
+        id: 'user',
+        route: '/users/:id',
+        routeKeys: ['id'],
+        routePattern: '^/users/([^/]+)$',
+        params: {
+          id: '^[0-9]+$'
+        },
+        htmlUrl: '/app/user.html',
+        logicUrl: null,
+        layoutUrl: null
+      }
+    ]
+  });
+
+  assert.deepEqual(app.matchRoute('/users/42')?.params, { id: '42' });
+  assert.equal(app.matchRoute('/users/abc'), null);
+});
+
 test('evaluateFrameworkExpression supports safe framework-only expressions', () => {
   const value = evaluateFrameworkExpression('event?.detail ?? count + 1', {
     count: 2,
@@ -283,6 +333,15 @@ test('sanitizeHtmlFragment strips obviously dangerous html sinks', () => {
   assert.equal(html.includes('onclick='), false);
   assert.equal(html.includes('javascript:'), false);
   assert.equal(html.includes('<p>safe</p>'), true);
+});
+
+test('BracketsApp html policy sanitizes by default and can allow trusted html explicitly', () => {
+  const safeApp = new BracketsApp({ routes: [], security: { html: 'sanitize' } });
+  const trustedApp = new BracketsApp({ routes: [], security: { html: 'trusted' } });
+  const source = '<div onclick="alert(1)"><script>alert(1)</script><p>safe</p></div>';
+
+  assert.equal(safeApp.renderHtmlContent(source).includes('<script>'), false);
+  assert.equal(trustedApp.renderHtmlContent(source).includes('<script>'), true);
 });
 
 test('runtime no longer relies on broad Function-based evaluation', async () => {
@@ -370,6 +429,125 @@ test('canRegisterServiceWorker only enables registration for trustworthy origins
   ), false);
 });
 
+test('parseArgs supports the expanded CLI command surface', () => {
+  const options = parseArgs([
+    'doctor',
+    'demo/app',
+    '--host', '127.0.0.1',
+    '--port', '9001',
+    '--proxy', '/remote=http://127.0.0.1:4174',
+    '--json',
+    '--strict'
+  ]);
+
+  assert.equal(options.command, 'doctor');
+  assert.equal(options.appRoot, 'demo/app');
+  assert.equal(options.host, '127.0.0.1');
+  assert.equal(options.port, 9001);
+  assert.equal(options.proxies['/remote'], 'http://127.0.0.1:4174');
+  assert.equal(options.json, true);
+  assert.equal(options.strict, true);
+
+  const serveAlias = parseArgs(['dev', 'demo/app', '--open']);
+  assert.equal(serveAlias.command, 'dev');
+  assert.equal(serveAlias.open, true);
+
+  const routeGenerator = parseArgs(['routes', 'demo/app', '--generate', '--dry-run', '--force']);
+  assert.equal(routeGenerator.command, 'routes');
+  assert.equal(routeGenerator.generate, true);
+  assert.equal(routeGenerator.dryRun, true);
+  assert.equal(routeGenerator.force, true);
+
+  const help = parseArgs(['help']);
+  assert.equal(help.command, 'help');
+});
+
+test('cli info, routes, and doctor expose useful output for humans and AI', async () => {
+  const cwd = fileURLToPath(new URL('..', import.meta.url));
+  const node = process.execPath;
+
+  const info = await execFile(node, ['src/cli.js', 'info', 'demo/app', '--json'], { cwd });
+  const infoPayload = JSON.parse(info.stdout);
+  assert.equal(infoPayload.framework, 'Brackets');
+  assert.equal(infoPayload.routes, 2);
+  assert.equal(infoPayload.assets.splash, '/framework/demo/splash.html');
+
+  const routes = await execFile(node, ['src/cli.js', 'routes', 'demo/app'], { cwd });
+  assert.match(routes.stdout, /contacts/);
+  assert.match(routes.stdout, /\//);
+
+  const doctor = await execFile(node, ['src/cli.js', 'doctor', 'demo/app', '--json'], { cwd });
+  const doctorPayload = JSON.parse(doctor.stdout);
+  assert.equal(doctorPayload.appRoot.endsWith(path.join('Brackets', 'demo', 'app')), true);
+  assert.equal(Array.isArray(doctorPayload.warnings), true);
+  assert.equal(doctorPayload.host.distribution.installFree, true);
+});
+
+test('generateRoutes infers missing view manifests from html structure without forcing folders', async () => {
+  const appRoot = await mkdtemp(path.join(tmpdir(), 'brackets-generate-'));
+
+  await mkdir(path.join(appRoot, 'blog'), { recursive: true });
+  await mkdir(path.join(appRoot, 'components'), { recursive: true });
+  await mkdir(path.join(appRoot, 'layouts'), { recursive: true });
+  await mkdir(path.join(appRoot, 'logic'), { recursive: true });
+  await writeFile(path.join(appRoot, 'index.html'), '<main><h1>Home</h1></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'about.html'), '<main><h1>About</h1></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'about.logic'), '({ mount() {} })', 'utf8');
+  await writeFile(path.join(appRoot, 'blog', '[id].html'), '<main><h1>Post</h1></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'components', 'card.html'), '<div>Card</div>', 'utf8');
+  await writeFile(path.join(appRoot, 'layouts', 'app.html'), '<header :area=\"header\"></header><main :mount></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'existing.html'), '<main><h1>Existing</h1></main>', 'utf8');
+  await writeFile(path.join(appRoot, 'existing.view'), `page({ id: 'existing', route: '/existing', html: './existing.html' })`, 'utf8');
+
+  try {
+    const report = await generateRoutes(appRoot);
+
+    assert.equal(report.created.length, 3);
+    assert.equal(report.skipped.some((item) => ['view-exists', 'already-routed'].includes(item.reason)), true);
+
+    const indexView = await readFile(path.join(appRoot, 'index.view'), 'utf8');
+    assert.match(indexView, /id: "home"/);
+    assert.match(indexView, /route: "\/"/);
+    assert.match(indexView, /html: "\.\/index\.html"/);
+
+    const aboutView = await readFile(path.join(appRoot, 'about.view'), 'utf8');
+    assert.match(aboutView, /route: "\/about"/);
+    assert.match(aboutView, /logic: "\.\/about\.logic"/);
+
+    const blogView = await readFile(path.join(appRoot, 'blog', '[id].view'), 'utf8');
+    assert.match(blogView, /route: "\/blog\/:id"/);
+
+    assert.equal(existsSync(path.join(appRoot, 'components', 'card.view')), false);
+    assert.equal(existsSync(path.join(appRoot, 'layouts', 'app.view')), false);
+  } finally {
+    await rm(appRoot, { recursive: true, force: true });
+  }
+});
+
+test('cli routes --generate can preview and create inferred route manifests', async () => {
+  const appRoot = await mkdtemp(path.join(tmpdir(), 'brackets-cli-generate-'));
+  const cwd = fileURLToPath(new URL('..', import.meta.url));
+  const node = process.execPath;
+
+  await writeFile(path.join(appRoot, 'contact.html'), '<main><h1>Contact</h1></main>', 'utf8');
+
+  try {
+    const preview = await execFile(node, ['src/cli.js', 'routes', appRoot, '--generate', '--dry-run', '--json'], { cwd });
+    const previewPayload = JSON.parse(preview.stdout);
+    assert.equal(previewPayload.write, false);
+    assert.equal(previewPayload.created[0].route, '/contact');
+    assert.equal(existsSync(path.join(appRoot, 'contact.view')), false);
+
+    const generated = await execFile(node, ['src/cli.js', 'routes', appRoot, '--generate', '--json'], { cwd });
+    const generatedPayload = JSON.parse(generated.stdout);
+    assert.equal(generatedPayload.write, true);
+    assert.equal(generatedPayload.resolvedRoutes[0].route, '/contact');
+    assert.equal(existsSync(path.join(appRoot, 'contact.view')), true);
+  } finally {
+    await rm(appRoot, { recursive: true, force: true });
+  }
+});
+
 test('server exposes shell, routes, syntax transforms, rpc, proxy, and security headers', async () => {
   const remote = await createRemoteServer(4374);
   const app = await createServer({
@@ -395,8 +573,10 @@ test('server exposes shell, routes, syntax transforms, rpc, proxy, and security 
 
     const routes = await fetch('http://127.0.0.1:4393/config/brackets.json').then((response) => response.json());
     assert.equal(routes.routes.length, 2);
-    assert.deepEqual(routes.routes.map((route) => route.route), ['/', '/contacts']);
+    assert.deepEqual(routes.routes.map((route) => route.route), ['/contacts', '/']);
+    assert.equal(routes.router.mode, 'file');
     assert.equal(routes.branding.title, 'Brackets is ready');
+    assert.equal(routes.security.html, 'sanitize');
     assert.equal(routes.assets.logo, '/framework/demo/logo.svg');
     assert.equal(routes.assets.splash, '/framework/demo/splash.html');
 
@@ -488,6 +668,143 @@ test('server exposes shell, routes, syntax transforms, rpc, proxy, and security 
   } finally {
     await app.close();
     await new Promise((resolve) => remote.close(resolve));
+  }
+});
+
+test('server supports hybrid file-based and logic-based routing together', async () => {
+  const appRoot = await mkdtemp(path.join(tmpdir(), 'brackets-router-'));
+
+  await mkdir(path.join(appRoot, 'pages'), { recursive: true });
+  await mkdir(path.join(appRoot, 'routes'), { recursive: true });
+  await writeFile(path.join(appRoot, 'index.view'), `page({
+  id: 'home',
+  html: './pages/home.html',
+  title: 'Home'
+})`, 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'home.html'), '<main :mount>Home</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'dashboard.html'), '<main :mount>Dashboard</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'admin.html'), '<main :mount>Admin</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'router.logic'), `({
+  beforeEach({ to }) {
+    return to.location.pathname === '/old-dashboard'
+      ? '/dashboard'
+      : null;
+  },
+  routes: [
+    {
+      id: 'dashboard',
+      route: '/dashboard',
+      html: './pages/dashboard.html',
+      title: 'Dashboard'
+    }
+  ]
+})`, 'utf8');
+  await writeFile(path.join(appRoot, 'routes', 'admin.logic'), `({
+  id: 'admin',
+  route: '/admin',
+  html: '../pages/admin.html',
+  title: 'Admin'
+})`, 'utf8');
+
+  const app = await createServer({
+    appRoot,
+    port: 4398,
+    host: '127.0.0.1'
+  });
+
+  try {
+    const payload = await fetch('http://127.0.0.1:4398/config/brackets.json').then((response) => response.json());
+    assert.equal(payload.router.mode, 'hybrid');
+    assert.equal(payload.router.logicUrl, '/app/router.logic');
+    assert.equal(payload.router.sources.viewRoutes, 1);
+    assert.equal(payload.router.sources.groupedLogicFiles, 1);
+    assert.equal(payload.router.hooks.beforeEach, true);
+    assert.deepEqual(payload.routes.map((route) => route.route), ['/dashboard', '/admin', '/']);
+    assert.deepEqual(payload.routes.map((route) => route.source), ['router.logic', 'routes.logic', 'view']);
+
+    const appContract = await fetch('http://127.0.0.1:4398/.well-known/brackets-app.json').then((response) => response.json());
+    assert.equal(appContract.router.mode, 'hybrid');
+    assert.equal(appContract.routes.length, 3);
+  } finally {
+    await app.close();
+    await rm(appRoot, { recursive: true, force: true });
+  }
+});
+
+test('server routing supports aliases, defaults, redirects, preload hints, and param validation metadata', async () => {
+  const appRoot = await mkdtemp(path.join(tmpdir(), 'brackets-router-plus-'));
+
+  await mkdir(path.join(appRoot, 'pages'), { recursive: true });
+  await mkdir(path.join(appRoot, 'routes'), { recursive: true });
+  await writeFile(path.join(appRoot, 'home.view'), `page({
+  id: 'home',
+  html: './pages/home.html',
+  route: '/',
+  alias: '/start'
+})`, 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'home.html'), '<main :mount>Home</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'layout.html'), '<div><main :mount></main></div>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'user.html'), '<main :mount>User</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'legacy.html'), '<main :mount>Legacy</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'pages', 'admin.html'), '<main :mount>Admin</main>', 'utf8');
+  await writeFile(path.join(appRoot, 'router.logic'), `({
+  defaults: {
+    layout: './pages/layout.html',
+    meta: { lang: 'en' },
+    preload: 'idle'
+  },
+  routes: [
+    {
+      id: 'user',
+      route: '/users/:id',
+      html: './pages/user.html',
+      aliases: ['/members/:id'],
+      params: { id: '^[0-9]+$' },
+      preload: 'render'
+    },
+    {
+      id: 'legacy-user',
+      route: '/legacy-user',
+      html: './pages/legacy.html',
+      redirectTo: '/users/1'
+    }
+  ]
+})`, 'utf8');
+  await writeFile(path.join(appRoot, 'routes', 'admin.logic'), `({
+  defaults: {
+    auth: { required: true }
+  },
+  routes: [
+    {
+      id: 'admin',
+      route: '/admin',
+      html: '../pages/admin.html'
+    }
+  ]
+})`, 'utf8');
+
+  const app = await createServer({
+    appRoot,
+    port: 4399,
+    host: '127.0.0.1'
+  });
+
+  try {
+    const payload = await fetch('http://127.0.0.1:4399/config/brackets.json').then((response) => response.json());
+    const byRoute = new Map(payload.routes.map((route) => [route.route, route]));
+
+    assert.equal(byRoute.get('/').preload, 'idle');
+    assert.equal(byRoute.get('/start').aliasOf, '/');
+    assert.equal(byRoute.get('/users/:id').preload, 'render');
+    assert.equal(byRoute.get('/users/:id').layoutUrl, '/app/pages/layout.html');
+    assert.equal(byRoute.get('/users/:id').meta.lang, 'en');
+    assert.equal(byRoute.get('/users/:id').params.id, '^[0-9]+$');
+    assert.equal(byRoute.get('/members/:id').aliasOf, '/users/:id');
+    assert.equal(byRoute.get('/legacy-user').redirectTo, '/users/1');
+    assert.equal(byRoute.get('/admin').auth.required, true);
+  } finally {
+    await app.close();
+    await rm(appRoot, { recursive: true, force: true });
   }
 });
 
@@ -796,6 +1113,7 @@ test('server data adapters support json, yaml, and db storage and tooling can va
     assert.equal(config.distribution.noBuild, true);
     assert.equal(config.framework, 'Brackets');
     assert.match(config.branding.title, /ready/i);
+    assert.equal(config.security.html, 'sanitize');
     const exportedTest = await readFile(path.join(outDir, 'tests', 'test.js'), 'utf8');
     assert.match(exportedTest, /Brackets starter is present/);
   } finally {
@@ -849,8 +1167,8 @@ test('transformHtmlSyntax supports the broader documented directive surface', ()
 
   const transformed = transformHtmlSyntax(source);
 
-  assert.match(transformed, /data-init="window\.BracketsRuntime\.read\('\/events\/users'\)"/);
-  assert.match(transformed, /data-effect="window\.BracketsRuntime\.mutate\('count', \$count\)"/);
+  assert.match(transformed, /data-init="@get\('\/events\/users'\)"/);
+  assert.match(transformed, /data-effect="\$count = \$count"/);
   assert.match(transformed, /data-class:open="\$open"/);
   assert.match(transformed, /data-attr:aria-hidden="!\$open"/);
   assert.match(transformed, /data-brx-loading="contacts"/);
@@ -889,14 +1207,33 @@ test('syntax contract includes the full documented directive inventory', () => {
 
 test('transformDatastarExpression preserves framework syntax while targeting Datastar semantics', () => {
   assert.equal(transformDatastarExpression('count + total'), '$count + $total');
-  assert.equal(transformDatastarExpression('mutate("count", count + 1)'), 'window.BracketsRuntime.mutate("count", $count + 1)');
-  assert.equal(transformDatastarExpression('read("/events")'), 'window.BracketsRuntime.read("/events")');
+  assert.equal(transformDatastarExpression('mutate("count", count + 1)'), '$count = $count + 1');
+  assert.equal(transformDatastarExpression('mutate("form.name", name)'), '$form.name = $name');
+  assert.equal(transformDatastarExpression('mutate({ count: count + 1 })'), 'window.BracketsRuntime.mutate({ count: $count + 1 })');
+  assert.equal(transformDatastarExpression('read("/events")'), '@get("/events")');
   assert.equal(transformDatastarExpression('request("/contacts")'), '@get("/contacts")');
   assert.equal(transformDatastarExpression('get("/contacts")'), '@get("/contacts")');
   assert.equal(transformDatastarExpression('create("/contacts")'), '@post("/contacts")');
   assert.equal(transformDatastarExpression('patch.state("/contacts/1")'), 'window.BracketsRuntime.patch.state("/contacts/1")');
   assert.equal(transformDatastarExpression('event?.detail ?? count'), 'evt?.detail ?? $count');
   assert.equal(transformDatastarExpression('form.name', { bindName: true }), 'form.name');
+});
+
+test('transformHtmlSyntax prefers native Datastar assignment for simple mutate calls', () => {
+  const source = `
+    <main :state="{ count: 0, form: { name: '' } }">
+      <button @click="mutate('count', count + 1)">Add</button>
+      <input @input="mutate('form.name', event.target.value)" />
+      <section :watch="mutate('count', count + 1)"></section>
+    </main>
+  `;
+
+  const transformed = transformHtmlSyntax(source);
+
+  assert.match(transformed, /data-on:click="\$count = \$count \+ 1"/);
+  assert.match(transformed, /data-on:input="\$form\.name = evt\.target\.value"/);
+  assert.match(transformed, /data-effect="\$count = \$count \+ 1"/);
+  assert.equal(/window\\.BracketsRuntime\\.mutate\('count'/.test(transformed), false);
 });
 
 test('reference still documents the broader framework vocabulary', async () => {
@@ -951,6 +1288,35 @@ test('reference keeps transport intent separate from result handling', async () 
   }
 });
 
+test('docs explain why Brackets does not need a plugin api', async () => {
+  const [docs, guide, agents, reference] = await Promise.all([
+    readFile(new URL('../docs.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/guide.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/agents.md', import.meta.url), 'utf8'),
+    readFile(new URL('../docs/reference.md', import.meta.url), 'utf8')
+  ]);
+
+  assert.match(docs, /Brackets does not need a framework-owned plugin API/i);
+  assert.match(docs, /drop the code into `app\/`/i);
+  assert.match(guide, /Brackets does not require a plugin API/i);
+  assert.match(guide, /standard browser ESM imports/i);
+  assert.match(agents, /Do not assume Brackets needs a plugin API/i);
+  assert.match(reference, /Brackets also does not need a framework-owned plugin API/i);
+});
+
+test('reference documents html trust policy and Datastar-first helper compilation', async () => {
+  const reference = await readFile(new URL('../docs/reference.md', import.meta.url), 'utf8');
+
+  for (const line of [
+    '| `security.html: sanitize` | sanitize `:html` output before insertion |',
+    '| `security.html: trusted` | allow raw `:html` output for intentionally trusted content |',
+    '- simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible',
+    '- simple `read("/events")` expressions in transformed markup should compile toward Datastar-native request behavior when possible'
+  ]) {
+    assert.match(reference, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
 test('reference keeps the canonical framework summary intact', async () => {
   const reference = await readFile(new URL('../docs/reference.md', import.meta.url), 'utf8');
 
@@ -963,13 +1329,18 @@ test('reference keeps the canonical framework summary intact', async () => {
     '| `.json` | simple structured storage |',
     '| `.yaml` | human-editable config/content storage |',
     '| `.db` | file-backed database storage |',
-    '| `router.logic` | router engine |',
+    '| `router.logic` | router engine and global router hooks |',
     '| `view.route` | optional route declaration in a `.view` file |',
     '| `/routes/*.logic` | grouped route registration for larger apps |',
     '| `id` | yes | stable page identity |',
     '| `html` | yes | page HTML reference |',
     '| `logic` | no | primary behavior module or inline logic |',
     '| `route` | no | route pattern or path |',
+    '| `alias` | no | single alternate route path |',
+    '| `aliases` | no | multiple alternate route paths |',
+    '| `params` | no | route param validation rules |',
+    '| `redirectTo` | no | redirect target for matched route |',
+    '| `preload` | no | route preload hint such as `render` or `idle` |',
     '| `title` | no | document/page title |',
     '| `layout` | no | layout HTML reference |',
     '| `api` | no | named remote dependencies |',

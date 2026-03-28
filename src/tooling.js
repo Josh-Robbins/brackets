@@ -4,6 +4,25 @@ import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from './server.js';
 import { transformHtmlSyntax } from './syntax.js';
 
+const ROUTE_GENERATION_EXCLUDE_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'framework',
+  'config',
+  'tests',
+  'layouts',
+  'components',
+  'fragments',
+  'partials',
+  'includes',
+  'api',
+  'data',
+  'storage',
+  'logic',
+  'routes'
+]);
+const ROUTE_STRIP_PREFIXES = ['pages/', 'views/', 'screens/'];
+
 async function withServer(appRoot, handler) {
   const instance = await createServer({
     appRoot,
@@ -16,6 +35,311 @@ async function withServer(appRoot, handler) {
   } finally {
     await instance.close();
   }
+}
+
+async function listFilesRecursive(rootDir, extension, options = {}) {
+  if (!existsSync(rootDir)) {
+    return [];
+  }
+
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (entry.isDirectory() && options.excludeDirs?.has(entry.name)) {
+      continue;
+    }
+
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await listFilesRecursive(fullPath, extension, options));
+      continue;
+    }
+
+    if (entry.name.endsWith(extension)) {
+      files.push(fullPath);
+    }
+  }
+
+  return files.sort((left, right) => left.localeCompare(right));
+}
+
+function toPosixPath(value) {
+  return value.split(path.sep).join('/');
+}
+
+function relativeSpecifier(fromDir, targetPath) {
+  const relative = toPosixPath(path.relative(fromDir, targetPath));
+  return relative.startsWith('.')
+    ? relative
+    : `./${relative}`;
+}
+
+function stripRoutePrefixes(relativePath) {
+  let normalized = toPosixPath(relativePath);
+  for (const prefix of ROUTE_STRIP_PREFIXES) {
+    if (normalized.startsWith(prefix)) {
+      normalized = normalized.slice(prefix.length);
+      break;
+    }
+  }
+  return normalized;
+}
+
+function routeSegmentFromFileSegment(segment) {
+  if (/^\(.+\)$/.test(segment)) {
+    return null;
+  }
+
+  const catchAll = segment.match(/^\[\.\.\.(.+)\]$/);
+  if (catchAll) {
+    return `*${catchAll[1]}`;
+  }
+
+  const dynamic = segment.match(/^\[(.+)\]$/);
+  if (dynamic) {
+    return `:${dynamic[1]}`;
+  }
+
+  return segment;
+}
+
+function inferRouteFromHtml(relativePath) {
+  const withoutExtension = stripRoutePrefixes(relativePath).replace(/\.[^.]+$/, '');
+  const segments = toPosixPath(withoutExtension)
+    .split('/')
+    .filter(Boolean);
+
+  if (segments.some((segment) => segment.startsWith('_'))) {
+    return null;
+  }
+
+  const routeSegments = [];
+  for (const [index, segment] of segments.entries()) {
+    const isTrailingIndex = index === segments.length - 1 && segment.toLowerCase() === 'index';
+    if (isTrailingIndex) {
+      continue;
+    }
+
+    const normalized = routeSegmentFromFileSegment(segment);
+    if (!normalized) {
+      continue;
+    }
+    routeSegments.push(normalized);
+  }
+
+  return routeSegments.length
+    ? `/${routeSegments.join('/')}`
+    : '/';
+}
+
+function inferRouteId(relativePath) {
+  const withoutExtension = stripRoutePrefixes(relativePath).replace(/\.[^.]+$/, '');
+  const segments = toPosixPath(withoutExtension)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => {
+      if (/^\(.+\)$/.test(segment)) {
+        return null;
+      }
+
+      if (segment.toLowerCase() === 'index') {
+        return null;
+      }
+
+      return segment
+        .replace(/^\[\.\.\.(.+)\]$/, '$1-splat')
+        .replace(/^\[(.+)\]$/, '$1')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    })
+    .filter(Boolean);
+
+  return segments.length
+    ? segments.join('-')
+    : 'home';
+}
+
+function inferTitleFromHtml(relativePath) {
+  const withoutExtension = path.basename(relativePath).replace(/\.[^.]+$/, '');
+  if (withoutExtension.toLowerCase() === 'index') {
+    return 'Home';
+  }
+
+  const plain = withoutExtension
+    .replace(/^\[\.\.\.(.+)\]$/, '$1')
+    .replace(/^\[(.+)\]$/, '$1')
+    .replace(/[-_]+/g, ' ')
+    .trim();
+
+  return plain
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function findCompanionLogic(htmlPath, appRoot) {
+  const siblingLogic = htmlPath.replace(/\.html$/i, '.logic');
+  if (existsSync(siblingLogic)) {
+    return siblingLogic;
+  }
+
+  const relativeHtml = stripRoutePrefixes(toPosixPath(path.relative(appRoot, htmlPath))).replace(/\.html$/i, '.logic');
+  const conventionalLogic = path.join(appRoot, 'logic', relativeHtml.split('/').join(path.sep));
+  if (existsSync(conventionalLogic)) {
+    return conventionalLogic;
+  }
+
+  return null;
+}
+
+async function routeGenerationCoverage(appRoot) {
+  try {
+    return await withServer(appRoot, async (instance) => {
+      const payload = await fetch(`${instance.url}/config/brackets.json`).then((response) => response.json());
+      return {
+        routes: payload.routes,
+        warnings: []
+      };
+    });
+  } catch (error) {
+    return {
+      routes: [],
+      warnings: [
+        `Route generation could not inspect existing routes through the host, so only file-level checks were used: ${error.message}`
+      ]
+    };
+  }
+}
+
+function buildGeneratedViewSource({ id, route, htmlSpecifier, logicSpecifier, title }) {
+  const lines = [
+    'page({',
+    `  id: ${JSON.stringify(id)},`,
+    `  route: ${JSON.stringify(route)},`,
+    `  html: ${JSON.stringify(htmlSpecifier)},`
+  ];
+
+  if (title) {
+    lines.push(`  title: ${JSON.stringify(title)},`);
+  }
+
+  if (logicSpecifier) {
+    lines.push(`  logic: ${JSON.stringify(logicSpecifier)},`);
+  }
+
+  const trailing = lines[lines.length - 1];
+  lines[lines.length - 1] = trailing.replace(/,$/, '');
+  lines.push('})', '');
+  return lines.join('\n');
+}
+
+export async function generateRoutes(appRoot, options = {}) {
+  const write = options.write !== false;
+  const force = options.force === true;
+  const htmlFiles = await listFilesRecursive(appRoot, '.html', {
+    excludeDirs: ROUTE_GENERATION_EXCLUDE_DIRS
+  });
+  const coverage = await routeGenerationCoverage(appRoot);
+  const existingHtmlUrls = new Set(coverage.routes.map((route) => route.htmlUrl));
+  const existingRoutes = new Map(coverage.routes.map((route) => [route.route, route]));
+  const seenGeneratedRoutes = new Map();
+  const created = [];
+  const skipped = [];
+
+  for (const htmlPath of htmlFiles) {
+    const htmlSource = await readFile(htmlPath, 'utf8');
+    const relativeHtml = toPosixPath(path.relative(appRoot, htmlPath));
+    const htmlUrl = `/app/${relativeHtml}`;
+    const viewPath = htmlPath.replace(/\.html$/i, '.view');
+
+    if (/:area\s*=|data-brx-area=|:fill\s*=|data-brx-fill=/i.test(htmlSource)) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        reason: 'layout-or-fill-template'
+      });
+      continue;
+    }
+
+    if (existingHtmlUrls.has(htmlUrl)) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        reason: 'already-routed'
+      });
+      continue;
+    }
+
+    if (existsSync(viewPath) && !force) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        reason: 'view-exists'
+      });
+      continue;
+    }
+
+    const route = inferRouteFromHtml(relativeHtml);
+    if (!route) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        reason: 'route-opt-out'
+      });
+      continue;
+    }
+
+    if (existingRoutes.has(route) && existingRoutes.get(route)?.htmlUrl !== htmlUrl) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        route,
+        reason: 'route-conflict'
+      });
+      continue;
+    }
+
+    if (seenGeneratedRoutes.has(route)) {
+      skipped.push({
+        htmlPath,
+        viewPath,
+        route,
+        reason: `route-conflict:${seenGeneratedRoutes.get(route)}`
+      });
+      continue;
+    }
+
+    seenGeneratedRoutes.set(route, relativeHtml);
+
+    const logicPath = findCompanionLogic(htmlPath, appRoot);
+    const generated = {
+      id: inferRouteId(relativeHtml),
+      title: inferTitleFromHtml(relativeHtml),
+      route,
+      htmlPath,
+      viewPath,
+      htmlSpecifier: relativeSpecifier(path.dirname(viewPath), htmlPath),
+      logicSpecifier: logicPath ? relativeSpecifier(path.dirname(viewPath), logicPath) : null
+    };
+
+    if (write) {
+      await writeFile(viewPath, buildGeneratedViewSource(generated), 'utf8');
+    }
+
+    created.push(generated);
+  }
+
+  return {
+    ok: true,
+    appRoot,
+    write,
+    force,
+    created,
+    skipped,
+    warnings: coverage.warnings
+  };
 }
 
 function auditMarkup(html, label, warnings) {
@@ -97,6 +421,7 @@ function buildPortableReleaseManifest(appRoot, routes, host, importMap, settings
     server: settings.server ?? null,
     branding: settings.branding ?? null,
     splash: settings.splash ?? null,
+    security: settings.security ?? null,
     assets: settings.assets ?? null,
     distribution: {
       mode: 'portable-folder',
@@ -258,6 +583,7 @@ export async function exportStaticSite(appRoot, outDir) {
             server: routesPayload.server,
             branding: routesPayload.branding,
             splash: routesPayload.splash,
+            security: routesPayload.security,
             assets: routesPayload.assets
           }
         ),

@@ -29,6 +29,78 @@ That means:
 
 The professional release target is documented in [release.md](C:\Users\joshr\Documents\dev\Brackets\docs\release.md).
 
+## Plugin model
+
+Brackets does not require a plugin API because the framework already exposes normal code surfaces everywhere that matter.
+
+Use these extension paths first:
+
+- `.html` for reusable UI and layouts
+- `.logic` for behavior
+- `.api` for backend integrations
+- `.data` for local storage integrations
+- standard browser ESM imports for third-party libraries
+- host bridges for desktop or native capabilities
+
+This is a strength, not a missing feature.
+
+A plugin API would add:
+
+- more framework ceremony
+- more compatibility rules
+- more version friction
+- more lock-in around something plain files already solve
+
+### Practical rule
+
+If you want to add capability in Brackets, start by asking:
+
+1. Is it UI?
+2. Is it behavior?
+3. Is it backend communication?
+4. Is it local storage?
+5. Is it a host-specific bridge?
+
+Then place it in normal Brackets files instead of reaching for a custom plugin system.
+
+### Example: add a browser library
+
+```js
+// app/search.logic
+import Fuse from './vendor/fuse.js'
+
+({
+  mount({ state }) {
+    const fuse = new Fuse([{ name: 'Ada' }, { name: 'Grace' }], { keys: ['name'] })
+    state.set({ results: fuse.search('Ada') })
+  }
+})
+```
+
+### Example: add a backend integration
+
+```js
+// app/search.api
+({
+  query({ http }, term) {
+    return http.client('/remote/search').get('/query', { term })
+  }
+})
+```
+
+### Example: add a local storage helper
+
+```js
+// app/search.data
+({
+  recent({ storage }) {
+    return storage.json('./recent-searches.json').read([])
+  }
+})
+```
+
+This keeps Brackets backend agnostic, portable, and easy to understand for both humans and AI.
+
 ## Start With This Mental Model
 
 Brackets apps are made of:

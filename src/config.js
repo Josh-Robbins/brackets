@@ -30,6 +30,9 @@ export const DEFAULT_BRACKETS_CONFIG = Object.freeze({
       'Adjust settings in config/brackets.json or config/brackets.yaml',
       'Use framework/docs.md and framework/agents.md when you need help'
     ]
+  },
+  security: {
+    html: 'sanitize'
   }
 });
 
@@ -83,6 +86,10 @@ function normalizeConfig(config, appRoot) {
   merged.splash.enabled = merged.splash.enabled !== false;
   merged.splash.chips ||= [...DEFAULT_BRACKETS_CONFIG.splash.chips];
   merged.splash.hints ||= [...DEFAULT_BRACKETS_CONFIG.splash.hints];
+  merged.security ||= {};
+  merged.security.html = merged.security.html === 'trusted'
+    ? 'trusted'
+    : DEFAULT_BRACKETS_CONFIG.security.html;
   return merged;
 }
 

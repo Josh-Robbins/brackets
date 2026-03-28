@@ -84,9 +84,10 @@ function toAppUrl(filePath, appRoot) {
   return `/app/${relative}`;
 }
 
-function resolveAppSpecifier(specifier, appRoot) {
+function resolveAppSpecifier(specifier, appRoot, baseDir = appRoot) {
   const aliasMap = {
     '@views/': 'views/',
+    '@routes/': 'routes/',
     '@logic/': 'logic/',
     '@api/': 'api/',
     '@data/': 'data/',
@@ -106,7 +107,7 @@ function resolveAppSpecifier(specifier, appRoot) {
     return cleanJoin(appRoot, specifier.slice('/app/'.length));
   }
 
-  return path.resolve(appRoot, specifier);
+  return path.resolve(baseDir, specifier);
 }
 
 function normalizeByteLimit(limit, fallback) {
@@ -193,14 +194,41 @@ async function loadDefaultExport(filePath) {
   return imported.default;
 }
 
+function normalizeRoutePath(route) {
+  if (!route || route === '/') {
+    return '/';
+  }
+
+  const normalized = route.startsWith('/') ? route : `/${route}`;
+  return normalized.length > 1
+    ? normalized.replace(/\/+$/, '')
+    : normalized;
+}
+
 function routeToRegExp(route) {
   const keys = [];
-  const pattern = route
-    .replace(/\/:([A-Za-z0-9_]+)/g, (_, key) => {
-      keys.push(key);
-      return '/([^/]+)';
+  const normalizedRoute = normalizeRoutePath(route);
+  const pattern = normalizedRoute
+    .split('/')
+    .map((segment, index) => {
+      if (index === 0) {
+        return '';
+      }
+
+      if (segment.startsWith(':')) {
+        keys.push(segment.slice(1));
+        return '/([^/]+)';
+      }
+
+      if (segment.startsWith('*')) {
+        const key = segment.slice(1) || 'splat';
+        keys.push(key);
+        return '/(.*)';
+      }
+
+      return `/${segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
     })
-    .replace(/\//g, '\\/');
+    .join('');
 
   return {
     keys,
@@ -208,21 +236,25 @@ function routeToRegExp(route) {
   };
 }
 
-async function listViewFiles(viewsDir) {
-  if (!existsSync(viewsDir)) {
+async function listFilesRecursive(rootDir, extension, options = {}) {
+  if (!existsSync(rootDir)) {
     return [];
   }
 
-  const entries = await readdir(viewsDir, { withFileTypes: true });
+  const entries = await readdir(rootDir, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
-    const fullPath = path.join(viewsDir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...await listViewFiles(fullPath));
+    if (options.excludeDirs?.has(entry.name)) {
       continue;
     }
 
-    if (entry.name.endsWith('.view')) {
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await listFilesRecursive(fullPath, extension, options));
+      continue;
+    }
+
+    if (entry.name.endsWith(extension)) {
       files.push(fullPath);
     }
   }
@@ -230,46 +262,320 @@ async function listViewFiles(viewsDir) {
   return files;
 }
 
-function normalizeManifest(manifest, viewPath, appRoot) {
+function deriveRouteFromFile(filePath, rootDir, stripPrefix = '') {
+  const relative = path.relative(rootDir, filePath).split(path.sep).join('/');
+  const withoutExtension = relative.replace(/\.[^.]+$/, '');
+  const withoutPrefix = stripPrefix && withoutExtension.startsWith(stripPrefix)
+    ? withoutExtension.slice(stripPrefix.length)
+    : withoutExtension;
+  const normalized = withoutPrefix
+    .replace(/(^|\/)index$/i, '')
+    .replace(/\/+/g, '/')
+    .replace(/^\/|\/$/g, '');
+
+  return normalized ? `/${normalized}` : '/';
+}
+
+function scoreRoute(route) {
+  const normalized = normalizeRoutePath(route);
+  const segments = normalized.split('/').filter(Boolean);
+  const staticSegments = segments.filter((segment) => !segment.startsWith(':') && !segment.startsWith('*')).length;
+  const paramSegments = segments.filter((segment) => segment.startsWith(':')).length;
+  const splatSegments = segments.filter((segment) => segment.startsWith('*')).length;
+  return (staticSegments * 100) + (segments.length * 10) - (paramSegments * 8) - (splatSegments * 16);
+}
+
+function mergeRecord(base = {}, extra = {}) {
+  return {
+    ...(base ?? {}),
+    ...(extra ?? {})
+  };
+}
+
+function mergeRouteDefaults(defaults = {}, definition = {}) {
+  return {
+    ...defaults,
+    ...definition,
+    meta: mergeRecord(defaults.meta, definition.meta),
+    seo: mergeRecord(defaults.seo, definition.seo),
+    auth: mergeRecord(defaults.auth, definition.auth),
+    assets: mergeRecord(defaults.assets, definition.assets),
+    api: mergeRecord(defaults.api, definition.api),
+    data: mergeRecord(defaults.data, definition.data),
+    params: mergeRecord(defaults.params, definition.params)
+  };
+}
+
+function normalizeAliasList(definition) {
+  const values = [
+    ...(definition.alias ? [definition.alias] : []),
+    ...(Array.isArray(definition.aliases) ? definition.aliases : [])
+  ];
+
+  return [...new Set(values
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value) => normalizeRoutePath(value)))];
+}
+
+function expandAliasRoutes(route) {
+  const aliases = route.aliases ?? [];
+  if (!aliases.length) {
+    return [route];
+  }
+
+  const expanded = [route];
+  for (const aliasRoute of aliases) {
+    expanded.push({
+      ...route,
+      route: aliasRoute,
+      alias: null,
+      aliases: [],
+      aliasOf: route.route,
+      canonicalRoute: route.canonicalRoute ?? route.route,
+      seo: {
+        ...(route.seo ?? {}),
+        canonical: route.seo?.canonical ?? route.canonicalRoute ?? route.route
+      },
+      routeKeys: routeToRegExp(aliasRoute).keys,
+      routePattern: routeToRegExp(aliasRoute).regex.source,
+      score: scoreRoute(aliasRoute),
+      source: `${route.source}:alias`
+    });
+  }
+  return expanded;
+}
+
+function resolveDependencyMap(specifiers, appRoot, baseDir) {
+  const resolved = {};
+  for (const [name, specifier] of Object.entries(specifiers ?? {})) {
+    resolved[name] = toAppUrl(resolveAppSpecifier(specifier, appRoot, baseDir), appRoot);
+  }
+  return resolved;
+}
+
+function normalizeRouteDefaults(defaults = {}, sourcePath, appRoot) {
+  if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) {
+    return {};
+  }
+
+  const sourceDir = path.dirname(sourcePath);
+  const normalized = { ...defaults };
+
+  for (const key of ['html', 'logic', 'layout']) {
+    if (typeof normalized[key] === 'string' && normalized[key]) {
+      normalized[key] = toAppUrl(resolveAppSpecifier(normalized[key], appRoot, sourceDir), appRoot);
+    }
+  }
+
+  normalized.api = resolveDependencyMap(normalized.api, appRoot, sourceDir);
+  normalized.data = resolveDependencyMap(normalized.data, appRoot, sourceDir);
+  return normalized;
+}
+
+function normalizeRouteDefinition(definition, sourcePath, appRoot, options = {}) {
+  if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+    throw new Error(`Brackets route definition in ${sourcePath} must be an object`);
+  }
+
+  const mergedDefinition = mergeRouteDefaults(options.defaults, definition);
+
+  if (typeof mergedDefinition.id !== 'string' || !mergedDefinition.id.trim()) {
+    throw new Error(`Brackets route definition in ${sourcePath} requires a non-empty id`);
+  }
+
+  if (typeof mergedDefinition.html !== 'string' || !mergedDefinition.html.trim()) {
+    throw new Error(`Brackets route definition "${mergedDefinition.id}" in ${sourcePath} requires a non-empty html reference`);
+  }
+
+  const sourceDir = path.dirname(sourcePath);
   const resolveMaybe = (specifier) => {
     if (!specifier) {
       return null;
     }
 
-    return toAppUrl(resolveAppSpecifier(specifier, appRoot), appRoot);
+    return toAppUrl(resolveAppSpecifier(specifier, appRoot, sourceDir), appRoot);
   };
 
-  const api = {};
-  const data = {};
-
-  for (const [name, specifier] of Object.entries(manifest.api ?? {})) {
-    api[name] = toAppUrl(resolveAppSpecifier(specifier, appRoot), appRoot);
-  }
-
-  for (const [name, specifier] of Object.entries(manifest.data ?? {})) {
-    data[name] = toAppUrl(resolveAppSpecifier(specifier, appRoot), appRoot);
-  }
-
-  const basename = path.basename(viewPath, '.view');
-  const route = manifest.route ?? `/${basename === 'index' ? '' : basename}`;
+  const route = normalizeRoutePath(mergedDefinition.route ?? options.defaultRoute ?? '/');
   const matcher = routeToRegExp(route || '/');
+  const source = options.source ?? 'view';
+  const sourcePriority = options.sourcePriority ?? 0;
+  const aliases = normalizeAliasList(mergedDefinition);
 
   return {
-    id: manifest.id,
+    id: mergedDefinition.id,
     route,
     routeKeys: matcher.keys,
     routePattern: matcher.regex.source,
-    title: manifest.title ?? '',
-    meta: manifest.meta ?? {},
-    seo: manifest.seo ?? {},
-    auth: manifest.auth ?? null,
-    assets: manifest.assets ?? {},
-    htmlUrl: resolveMaybe(manifest.html),
-    layoutUrl: resolveMaybe(manifest.layout),
-    logicUrl: resolveMaybe(manifest.logic),
-    api,
-    data
+    title: mergedDefinition.title ?? '',
+    meta: mergedDefinition.meta ?? {},
+    seo: mergedDefinition.seo ?? {},
+    auth: mergedDefinition.auth ?? null,
+    assets: mergedDefinition.assets ?? {},
+    htmlUrl: resolveMaybe(mergedDefinition.html),
+    layoutUrl: resolveMaybe(mergedDefinition.layout),
+    logicUrl: resolveMaybe(mergedDefinition.logic),
+    api: resolveDependencyMap(mergedDefinition.api, appRoot, sourceDir),
+    data: resolveDependencyMap(mergedDefinition.data, appRoot, sourceDir),
+    params: mergedDefinition.params ?? {},
+    redirectTo: mergedDefinition.redirectTo ?? null,
+    preload: mergedDefinition.preload ?? null,
+    aliases,
+    aliasOf: null,
+    canonicalRoute: route,
+    source,
+    sourceUrl: toAppUrl(sourcePath, appRoot),
+    sourcePriority,
+    score: scoreRoute(route)
   };
+}
+
+function normalizeManifest(manifest, viewPath, appRoot, defaults = {}) {
+  const viewsDir = path.join(appRoot, 'views');
+  const defaultRoot = viewPath.startsWith(viewsDir)
+    ? viewsDir
+    : appRoot;
+  return normalizeRouteDefinition(manifest, viewPath, appRoot, {
+    defaultRoute: deriveRouteFromFile(viewPath, defaultRoot),
+    defaults,
+    source: 'view',
+    sourcePriority: 10
+  });
+}
+
+function extractRouteDefinitions(exported) {
+  if (!exported) {
+    return [];
+  }
+
+  if (Array.isArray(exported)) {
+    return exported;
+  }
+
+  if (Array.isArray(exported.routes)) {
+    return exported.routes;
+  }
+
+  if (typeof exported === 'object' && (exported.id || exported.route || exported.html)) {
+    return [exported];
+  }
+
+  return [];
+}
+
+function dedupeAndSortRoutes(routes) {
+  const sorted = [...routes].sort((left, right) => {
+    if (right.sourcePriority !== left.sourcePriority) {
+      return right.sourcePriority - left.sourcePriority;
+    }
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    if (right.route.length !== left.route.length) {
+      return right.route.length - left.route.length;
+    }
+    return left.route.localeCompare(right.route);
+  });
+
+  const deduped = [];
+  const seen = new Set();
+  for (const route of sorted) {
+    const key = route.route;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(route);
+  }
+
+  return deduped;
+}
+
+async function buildRouterBundle(appRoot, cache) {
+  const routerLogicPath = path.join(appRoot, 'router.logic');
+  const groupedRoutesDir = path.join(appRoot, 'routes');
+  const viewFiles = await listFilesRecursive(appRoot, '.view', {
+    excludeDirs: new Set(['node_modules', '.git'])
+  });
+  const groupedRouteFiles = await listFilesRecursive(groupedRoutesDir, '.logic', {
+    excludeDirs: new Set(['node_modules', '.git'])
+  });
+  const signatureFiles = [
+    ...viewFiles,
+    ...groupedRouteFiles,
+    ...(existsSync(routerLogicPath) ? [routerLogicPath] : [])
+  ];
+  const signature = (await Promise.all(signatureFiles.map(async (filePath) => {
+    const info = await stat(filePath);
+    return `${filePath}:${info.mtimeMs}`;
+  }))).join('|');
+
+  if (cache.signature === signature && cache.bundle) {
+    return cache.bundle;
+  }
+
+  const routes = [];
+  let routerExport = {};
+  if (existsSync(routerLogicPath)) {
+    routerExport = await loadDefaultExport(routerLogicPath) ?? {};
+  }
+  const routerDefaults = existsSync(routerLogicPath)
+    ? normalizeRouteDefaults(routerExport.defaults ?? {}, routerLogicPath, appRoot)
+    : {};
+
+  for (const filePath of viewFiles) {
+    const manifest = await loadDefaultExport(filePath);
+    routes.push(...expandAliasRoutes(normalizeManifest(manifest, filePath, appRoot, routerDefaults)));
+  }
+
+  for (const filePath of groupedRouteFiles) {
+    const exported = await loadDefaultExport(filePath);
+    const groupedDefaults = mergeRouteDefaults(routerDefaults, normalizeRouteDefaults(exported?.defaults ?? {}, filePath, appRoot));
+    const definitions = extractRouteDefinitions(exported);
+    for (const definition of definitions) {
+      routes.push(...expandAliasRoutes(normalizeRouteDefinition(definition, filePath, appRoot, {
+        defaultRoute: deriveRouteFromFile(filePath, groupedRoutesDir),
+        defaults: groupedDefaults,
+        source: 'routes.logic',
+        sourcePriority: 20
+      })));
+    }
+  }
+
+  if (existsSync(routerLogicPath)) {
+    const definitions = extractRouteDefinitions(routerExport);
+    for (const definition of definitions) {
+      routes.push(...expandAliasRoutes(normalizeRouteDefinition(definition, routerLogicPath, appRoot, {
+        defaultRoute: '/',
+        defaults: routerDefaults,
+        source: 'router.logic',
+        sourcePriority: 30
+      })));
+    }
+  }
+
+  const normalizedRoutes = dedupeAndSortRoutes(routes);
+  const bundle = {
+    routes: normalizedRoutes,
+    router: {
+      mode: existsSync(routerLogicPath) || groupedRouteFiles.length ? 'hybrid' : 'file',
+      logicUrl: existsSync(routerLogicPath) ? toAppUrl(routerLogicPath, appRoot) : null,
+      sources: {
+        viewRoutes: viewFiles.length,
+        groupedLogicFiles: groupedRouteFiles.length,
+        logicRoutes: normalizedRoutes.filter((route) => route.source !== 'view').length
+      },
+      hooks: {
+        beforeEach: typeof routerExport?.beforeEach === 'function',
+        afterEach: typeof routerExport?.afterEach === 'function',
+        notFound: typeof routerExport?.notFound === 'function'
+      }
+    }
+  };
+
+  cache.signature = signature;
+  cache.bundle = bundle;
+  return bundle;
 }
 
 function parseCookies(cookieHeader = '') {
@@ -401,29 +707,6 @@ function buildHostContract(origin, appRoot, appConfig) {
       forcedDownloadQuery: 'download'
     }
   };
-}
-
-async function buildRoutes(appRoot, cache) {
-  const viewsDir = path.join(appRoot, 'views');
-  const files = await listViewFiles(viewsDir);
-  const signature = (await Promise.all(files.map(async (filePath) => {
-    const info = await stat(filePath);
-    return `${filePath}:${info.mtimeMs}`;
-  }))).join('|');
-
-  if (cache.signature === signature && cache.routes) {
-    return cache.routes;
-  }
-
-  const routes = [];
-  for (const filePath of files) {
-    const manifest = await loadDefaultExport(filePath);
-    routes.push(normalizeManifest(manifest, filePath, appRoot));
-  }
-
-  cache.signature = signature;
-  cache.routes = routes.sort((left, right) => left.route.localeCompare(right.route));
-  return cache.routes;
 }
 
 function securityHeaders(contentType, localOnly) {
@@ -1100,6 +1383,7 @@ function buildImportMap() {
   return {
     imports: {
       '@views/': '/app/views/',
+      '@routes/': '/app/routes/',
       '@logic/': '/app/logic/',
       '@api/': '/app/api/',
       '@data/': '/app/data/',
@@ -1180,7 +1464,7 @@ export async function createServer({
   const sourceCache = new Map();
   const routeCache = {
     signature: null,
-    routes: null
+    bundle: null
   };
   const normalizedProxies = normalizeProxies(proxies, {
     proxyBodyLimitBytes: normalizeByteLimit(proxyBodyLimitBytes, DEFAULT_PROXY_BODY_LIMIT_BYTES),
@@ -1271,7 +1555,7 @@ export async function createServer({
       }
 
       if (url.pathname === '/config/brackets.json' || url.pathname === '/__brackets/routes') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes, router } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/json; charset=utf-8', json({
           framework: 'Brackets',
           server: {
@@ -1280,11 +1564,13 @@ export async function createServer({
           },
           branding: appConfig.branding,
           splash: appConfig.splash,
+          security: appConfig.security,
           assets: {
             logo: '/framework/demo/logo.svg',
             favicon: '/framework/demo/favicon.svg',
             splash: '/framework/demo/splash.html'
           },
+          router,
           routes,
           importMap: buildImportMap(),
           host: hostContract
@@ -1305,11 +1591,12 @@ export async function createServer({
       }
 
       if (url.pathname === '/__brackets/debug') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes, router } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/json; charset=utf-8', json({
           framework: hostContract.framework,
           version: hostContract.version,
           host: hostContract,
+          router,
           session: {
             authenticated: Boolean(sessionState.authenticated),
             user: sessionState.user ?? null
@@ -1338,19 +1625,19 @@ export async function createServer({
       }
 
       if (url.pathname === '/sitemap.xml') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/xml; charset=utf-8', buildSitemapXml(routes, serverOrigin));
         return;
       }
 
       if (url.pathname === '/manifest.webmanifest') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/manifest+json; charset=utf-8', json(buildWebManifest(routes, serverOrigin, path.basename(resolvedAppRoot))));
         return;
       }
 
       if (url.pathname === '/feed.xml') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/xml; charset=utf-8', buildFeedXml(routes, serverOrigin));
         return;
       }
@@ -1366,12 +1653,13 @@ export async function createServer({
       }
 
       if (url.pathname === '/.well-known/brackets-app.json') {
-        const routes = await buildRoutes(resolvedAppRoot, routeCache);
+        const { routes, router } = await buildRouterBundle(resolvedAppRoot, routeCache);
         send(res, 200, 'application/json; charset=utf-8', json({
           framework: hostContract.framework,
           version: hostContract.version,
           appRoot: path.basename(resolvedAppRoot),
           distribution: hostContract.distribution,
+          router,
           routes: routes.map((route) => ({
             id: route.id,
             route: route.route,

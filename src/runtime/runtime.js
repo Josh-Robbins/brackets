@@ -50,7 +50,7 @@ const FRAMEWORK_CONSTANTS = Object.freeze({
   undefined
 });
 
-function escapeHtml(value) {
+function safeText(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -725,22 +725,64 @@ async function invokeServerModule(kind, moduleUrl, method, args) {
   return payload.result;
 }
 
-export function parseRoute(pattern, pathname) {
+function normalizeRoutePath(route) {
+  if (!route || route === '/') {
+    return '/';
+  }
+
+  const normalized = route.startsWith('/') ? route : `/${route}`;
+  return normalized.length > 1
+    ? normalized.replace(/\/+$/, '')
+    : normalized;
+}
+
+function buildRouteMatcher(pattern) {
   const keys = [];
-  const regex = new RegExp(`^${pattern.replace(/\/:([A-Za-z0-9_]+)/g, (_, key) => {
-    keys.push(key);
-    return '/([^/]+)';
-  }).replace(/\//g, '\\/')}$`);
-  const match = pathname.match(regex);
+  const normalized = normalizeRoutePath(pattern);
+  const routePattern = normalized
+    .split('/')
+    .map((segment, index) => {
+      if (index === 0) {
+        return '';
+      }
+
+      if (segment.startsWith(':')) {
+        keys.push(segment.slice(1));
+        return '/([^/]+)';
+      }
+
+      if (segment.startsWith('*')) {
+        const key = segment.slice(1) || 'splat';
+        keys.push(key);
+        return '/(.*)';
+      }
+
+      return `/${segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+    })
+    .join('');
+
+  return {
+    keys,
+    regex: new RegExp(`^${routePattern}$`)
+  };
+}
+
+function extractRouteParams(routeKeys, match) {
+  const params = {};
+  routeKeys.forEach((key, index) => {
+    params[key] = decodeURIComponent(match[index + 1]);
+  });
+  return params;
+}
+
+export function parseRoute(pattern, pathname) {
+  const matcher = buildRouteMatcher(pattern);
+  const match = pathname.match(matcher.regex);
   if (!match) {
     return null;
   }
 
-  const params = {};
-  keys.forEach((key, index) => {
-    params[key] = decodeURIComponent(match[index + 1]);
-  });
-  return params;
+  return extractRouteParams(matcher.keys, match);
 }
 
 export function createLocationSnapshot(target, origin = 'http://127.0.0.1') {
@@ -784,11 +826,67 @@ export function buildNavigationPlan(current, layout, nextRoute) {
   };
 }
 
+export function normalizeRouterRedirect(result) {
+  if (!result) {
+    return null;
+  }
+
+  if (typeof result === 'string') {
+    return {
+      path: result,
+      replace: true
+    };
+  }
+
+  if (typeof result === 'object') {
+    const path = result.redirectTo ?? result.path ?? result.href ?? null;
+    if (!path) {
+      return null;
+    }
+
+    return {
+      path,
+      replace: result.replace ?? true
+    };
+  }
+
+  return null;
+}
+
+function normalizeRouteAliases(route) {
+  return [
+    ...(route.alias ? [route.alias] : []),
+    ...(Array.isArray(route.aliases) ? route.aliases : [])
+  ];
+}
+
+function validateRouteParams(route, params) {
+  for (const [name, pattern] of Object.entries(route?.params ?? {})) {
+    if (typeof pattern !== 'string' || !pattern) {
+      continue;
+    }
+
+    const value = params?.[name];
+    if (value === undefined) {
+      return false;
+    }
+
+    if (!new RegExp(pattern).test(String(value))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export class BracketsApp {
   constructor(config) {
     this.routes = config.routes;
+    this.router = config.router ?? { mode: 'file', logicUrl: null, sources: {}, hooks: {} };
     this.host = config.host ?? readJsonScript('brackets-host', {});
+    this.security = config.security ?? { html: 'sanitize' };
     this.sessionState = config.session ?? readJsonScript('brackets-session', { authenticated: false, user: null });
+    this.routerLogic = null;
     this.current = null;
     this.layout = null;
     this.actionContext = null;
@@ -814,6 +912,9 @@ export class BracketsApp {
     this.patch = this.createTransportCallable('PATCH', 'state');
     this.delete = this.createTransportCallable('DELETE', 'html');
     this.read = this.createTransportCallable('GET', 'sse');
+    this.initialPath = typeof window === 'undefined'
+      ? '/'
+      : `${window.location.pathname}${window.location.search}${window.location.hash}`;
   }
 
   createTransportCallable(method, defaultResultMode) {
@@ -919,6 +1020,37 @@ export class BracketsApp {
     void this.warmRoute(matched.route);
   }
 
+  scheduleConfiguredPrefetch() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const currentPath = createLocationSnapshot(this.initialPath, window.location.origin).pathname;
+    const renderRoutes = this.routes.filter((route) => route.preload === 'render' && route.route !== currentPath);
+    const idleRoutes = this.routes.filter((route) => route.preload === 'idle' && route.route !== currentPath);
+
+    for (const route of renderRoutes) {
+      void this.warmRoute(route);
+    }
+
+    if (!idleRoutes.length) {
+      return;
+    }
+
+    const warmIdleRoutes = () => {
+      for (const route of idleRoutes) {
+        void this.warmRoute(route);
+      }
+    };
+
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(warmIdleRoutes);
+      return;
+    }
+
+    window.setTimeout(warmIdleRoutes, 120);
+  }
+
   buildRouteContext(route, params, location) {
     const routeLocation = location ?? createLocationSnapshot(window.location.href, window.location.origin);
     return {
@@ -946,6 +1078,49 @@ export class BracketsApp {
         return new URLSearchParams(routeLocation.search).get(name) ?? undefined;
       }
     };
+  }
+
+  buildRouterHookContext(nextLocation, matched = null) {
+    const from = this.lastRouteSnapshot
+      ? {
+          route: this.lastRouteSnapshot.route,
+          params: clone(this.lastRouteSnapshot.params ?? {}),
+          location: { ...this.lastRouteSnapshot.location }
+        }
+      : null;
+
+    return {
+      to: {
+        route: matched?.route ?? null,
+        params: clone(matched?.params ?? {}),
+        location: { ...nextLocation }
+      },
+      from,
+      routes: this.routes.map((route) => ({
+        id: route.id,
+        route: route.route,
+        title: route.title ?? '',
+        source: route.source ?? 'view',
+        preload: route.preload ?? null,
+        aliasOf: route.aliasOf ?? null
+      })),
+      session: clone(this.sessionState ?? { authenticated: false, user: null }),
+      host: clone(this.host ?? {}),
+      nav: this.nav,
+      auth: {
+        session: () => this.getSession(),
+        refresh: () => this.getSession(true)
+      }
+    };
+  }
+
+  async runRouterHook(name, nextLocation, matched = null) {
+    const hook = this.routerLogic?.[name];
+    if (typeof hook !== 'function') {
+      return null;
+    }
+
+    return hook(this.buildRouterHookContext(nextLocation, matched));
   }
 
   getCsrfToken() {
@@ -1470,6 +1645,10 @@ export class BracketsApp {
   }
 
   async start() {
+    if (this.router.logicUrl) {
+      this.routerLogic = await this.importModuleCached(this.router.logicUrl).catch(() => null);
+    }
+
     document.addEventListener('click', (event) => {
       const link = event.target.closest('a[href]');
       if (!shouldHandleNavigationClick(event, link)) {
@@ -1524,6 +1703,7 @@ export class BracketsApp {
 
     this.attachDevtoolsBridge();
     await this.registerServiceWorker();
+    this.scheduleConfiguredPrefetch();
   }
 
   attachDevtoolsBridge() {
@@ -1563,7 +1743,10 @@ export class BracketsApp {
       routes: this.routes.map((route) => ({
         id: route.id,
         route: route.route,
-        title: route.title ?? ''
+        title: route.title ?? '',
+        preload: route.preload ?? null,
+        aliasOf: route.aliasOf ?? null,
+        aliases: normalizeRouteAliases(route)
       }))
     };
   }
@@ -1607,9 +1790,18 @@ export class BracketsApp {
 
   matchRoute(pathname) {
     for (const route of this.routes) {
-      const params = parseRoute(route.route, pathname);
-      if (params) {
-        return { route, params };
+      const matcher = route.routePattern
+        ? new RegExp(route.routePattern)
+        : buildRouteMatcher(route.route).regex;
+      const match = pathname.match(matcher);
+      if (match) {
+        const params = route.routeKeys?.length
+          ? extractRouteParams(route.routeKeys, match)
+          : parseRoute(route.route, pathname);
+        if (!validateRouteParams(route, params ?? {})) {
+          continue;
+        }
+        return { route, params: params ?? {} };
       }
     }
 
@@ -1797,7 +1989,7 @@ export class BracketsApp {
 
     for (const binding of instance.bindings) {
       if (binding.kind === 'html') {
-        binding.element.innerHTML = sanitizeHtmlFragment(this.evaluate(instance, binding.expression) ?? '');
+        binding.element.innerHTML = this.renderHtmlContent(this.evaluate(instance, binding.expression) ?? '');
         continue;
       }
 
@@ -1837,6 +2029,13 @@ export class BracketsApp {
         }
       }
     }
+  }
+
+  renderHtmlContent(value) {
+    const html = String(value ?? '');
+    return this.security?.html === 'trusted'
+      ? html
+      : sanitizeHtmlFragment(html);
   }
 
   mutate(target, path, value) {
@@ -2143,7 +2342,7 @@ export class BracketsApp {
     }
 
     await this.disposeCurrent();
-    root.innerHTML = `<main style="padding: 3rem;"><h1>Route not found</h1><p>${escapeHtml(nextLocation.pathname)}</p></main>`;
+    root.innerHTML = `<main style="padding: 3rem;"><h1>Route not found</h1><p>${safeText(nextLocation.pathname)}</p></main>`;
     this.lastRouteSnapshot = {
       route: null,
       params: {},
@@ -2163,35 +2362,172 @@ export class BracketsApp {
 
     const navigationToken = ++this.navigationToken;
     const nextLocation = createLocationSnapshot(nextPath, window.location.origin);
-    this.routeState.loading = true;
-    this.routeState.error = null;
-    this.scheduleFrameworkRender(this.current);
-    const matched = this.matchRoute(nextLocation.pathname);
-
-    this.updateHistory(nextLocation, options);
-
-    if (!matched) {
-      await this.renderNotFound(nextLocation, options);
-      this.routeState.loading = false;
+    try {
+      this.routeState.loading = true;
+      this.routeState.error = null;
       this.scheduleFrameworkRender(this.current);
-      return;
-    }
+      const matched = this.matchRoute(nextLocation.pathname);
+      const beforeDecision = normalizeRouterRedirect(await this.runRouterHook('beforeEach', nextLocation, matched));
 
-    const route = matched.route;
-    if (route.auth?.required) {
-      const session = await this.getSession();
-      if (!session?.authenticated) {
+      if (beforeDecision && beforeDecision.path !== nextLocation.path) {
         this.routeState.loading = false;
-        await this.nav.redirect(route.auth.redirectTo ?? '/login', { replace: true });
+        await this.navigate(beforeDecision.path, { replace: beforeDecision.replace });
         return;
       }
-    }
-    const plan = buildNavigationPlan(this.current, this.layout, route);
 
-    if (plan.shouldSync && this.current) {
-      this.current.route = route;
-      this.current.params = matched.params;
-      this.current.location = nextLocation;
+      if (!matched) {
+        this.updateHistory(nextLocation, options);
+        const notFoundResult = await this.runRouterHook('notFound', nextLocation, null);
+        const redirect = normalizeRouterRedirect(notFoundResult);
+        if (redirect && redirect.path !== nextLocation.path) {
+          this.routeState.loading = false;
+          await this.navigate(redirect.path, { replace: redirect.replace });
+          return;
+        }
+
+        if (notFoundResult && typeof notFoundResult === 'object' && typeof notFoundResult.html === 'string') {
+          await this.disposeCurrent();
+          root.innerHTML = this.renderHtmlContent(notFoundResult.html);
+          this.lastRouteSnapshot = {
+            route: null,
+            params: {},
+            location: nextLocation
+          };
+          this.applyDocumentMetadata({
+            title: notFoundResult.title ?? 'Not Found',
+            meta: { description: notFoundResult.description ?? 'Route not found' },
+            seo: { index: false }
+          });
+          this.routeState.loading = false;
+          this.scheduleFrameworkRender(this.current);
+          return;
+        }
+
+        await this.renderNotFound(nextLocation, options);
+        this.routeState.loading = false;
+        this.scheduleFrameworkRender(this.current);
+        return;
+      }
+
+      const route = matched.route;
+      if (route.redirectTo) {
+        this.routeState.loading = false;
+        await this.nav.redirect(route.redirectTo, { replace: true });
+        return;
+      }
+
+      if (route.auth?.required) {
+        const session = await this.getSession();
+        if (!session?.authenticated) {
+          this.routeState.loading = false;
+          await this.nav.redirect(route.auth.redirectTo ?? '/login', { replace: true });
+          return;
+        }
+      }
+      this.updateHistory(nextLocation, options);
+      const plan = buildNavigationPlan(this.current, this.layout, route);
+
+      if (plan.shouldSync && this.current) {
+        this.current.route = route;
+        this.current.params = matched.params;
+        this.current.location = nextLocation;
+        this.lastRouteSnapshot = {
+          route,
+          params: clone(matched.params),
+          location: nextLocation
+        };
+        this.applyDocumentMetadata(route);
+
+        if (typeof this.current.logic?.sync === 'function') {
+          await this.current.logic.sync(this.createCtx(this.current));
+        }
+
+        if (navigationToken !== this.navigationToken) {
+          return;
+        }
+
+        await this.runRouterHook('afterEach', nextLocation, matched);
+        this.scheduleFrameworkRender(this.current);
+        this.routeState.loading = false;
+        this.emitDebugEvent('route-sync', {
+          id: route.id,
+          path: nextLocation.path
+        });
+        this.scrollAfterNavigation(nextLocation, options);
+        return;
+      }
+
+      void this.warmRoute(route);
+
+      const pageHtmlPromise = this.fetchTextCached(route.htmlUrl);
+      const logicPromise = route.logicUrl
+        ? this.importModuleCached(route.logicUrl)
+        : Promise.resolve({});
+
+      if (plan.layoutChanged) {
+        const layoutHtml = route.layoutUrl
+          ? await this.fetchTextCached(route.layoutUrl)
+          : '<main data-brx-mount></main>';
+
+        if (navigationToken !== this.navigationToken) {
+          return;
+        }
+
+        if (this.current) {
+          await this.disposeCurrent();
+        }
+
+        if (navigationToken !== this.navigationToken) {
+          return;
+        }
+
+        root.innerHTML = layoutHtml;
+        this.layout = {
+          url: route.layoutUrl ?? null,
+          areas: this.captureLayoutAreas()
+        };
+      } else if (this.current) {
+        await this.disposeCurrent({ preserveLayout: true });
+
+        if (navigationToken !== this.navigationToken) {
+          return;
+        }
+
+        this.restoreLayoutAreas();
+      }
+
+      const [pageHtml, logic] = await Promise.all([pageHtmlPromise, logicPromise]);
+      if (navigationToken !== this.navigationToken) {
+        return;
+      }
+
+      if (!plan.layoutChanged) {
+        this.restoreLayoutAreas();
+      }
+
+      const mountPoint = root.querySelector('[data-brx-mount]') ?? root;
+      const fills = this.extractFills(pageHtml);
+      this.applyFills(fills);
+      mountPoint.innerHTML = this.stripFills(pageHtml);
+
+      const pageRoot = mountPoint.firstElementChild ?? mountPoint;
+      const instance = {
+        route,
+        params: matched.params,
+        location: nextLocation,
+        root: pageRoot,
+        logic,
+        bindings: [],
+        cleanups: [],
+        transportState: {
+          loading: false,
+          error: null
+        },
+        requestState: {}
+      };
+
+      pageRoot.dataset.brxRoute = route.id;
+      this.current = instance;
       this.lastRouteSnapshot = {
         route,
         params: clone(matched.params),
@@ -2199,129 +2535,43 @@ export class BracketsApp {
       };
       this.applyDocumentMetadata(route);
 
-      if (typeof this.current.logic?.sync === 'function') {
-        await this.current.logic.sync(this.createCtx(this.current));
+      await this.resolveUses(instance.root);
+      await this.flushDatastar();
+
+      if (navigationToken !== this.navigationToken) {
+        return;
+      }
+
+      this.bindTree(instance);
+      this.renderBindings(instance);
+
+      if (typeof logic.mount === 'function') {
+        const maybeCleanup = await logic.mount(this.createCtx(instance));
+        if (typeof maybeCleanup === 'function') {
+          instance.cleanups.push(maybeCleanup);
+        }
       }
 
       if (navigationToken !== this.navigationToken) {
         return;
       }
 
-      this.scheduleFrameworkRender(this.current);
+      await this.runRouterHook('afterEach', nextLocation, matched);
       this.routeState.loading = false;
-      this.emitDebugEvent('route-sync', {
+      this.emitDebugEvent('route-mounted', {
         id: route.id,
         path: nextLocation.path
       });
       this.scrollAfterNavigation(nextLocation, options);
-      return;
+    } catch (error) {
+      this.routeState.error = error;
+      this.routeState.loading = false;
+      this.scheduleFrameworkRender(this.current);
+      this.emitDebugEvent('route-error', {
+        path: nextLocation.path,
+        error: String(error?.message ?? error)
+      });
     }
-
-    void this.warmRoute(route);
-
-    const pageHtmlPromise = this.fetchTextCached(route.htmlUrl);
-    const logicPromise = route.logicUrl
-      ? this.importModuleCached(route.logicUrl)
-      : Promise.resolve({});
-
-    if (plan.layoutChanged) {
-      const layoutHtml = route.layoutUrl
-        ? await this.fetchTextCached(route.layoutUrl)
-        : '<main data-brx-mount></main>';
-
-      if (navigationToken !== this.navigationToken) {
-        return;
-      }
-
-      if (this.current) {
-        await this.disposeCurrent();
-      }
-
-      if (navigationToken !== this.navigationToken) {
-        return;
-      }
-
-      root.innerHTML = layoutHtml;
-      this.layout = {
-        url: route.layoutUrl ?? null,
-        areas: this.captureLayoutAreas()
-      };
-    } else if (this.current) {
-      await this.disposeCurrent({ preserveLayout: true });
-
-      if (navigationToken !== this.navigationToken) {
-        return;
-      }
-
-      this.restoreLayoutAreas();
-    }
-
-    const [pageHtml, logic] = await Promise.all([pageHtmlPromise, logicPromise]);
-    if (navigationToken !== this.navigationToken) {
-      return;
-    }
-
-    if (!plan.layoutChanged) {
-      this.restoreLayoutAreas();
-    }
-
-    const mountPoint = root.querySelector('[data-brx-mount]') ?? root;
-    const fills = this.extractFills(pageHtml);
-    this.applyFills(fills);
-    mountPoint.innerHTML = this.stripFills(pageHtml);
-
-    const pageRoot = mountPoint.firstElementChild ?? mountPoint;
-    const instance = {
-      route,
-      params: matched.params,
-      location: nextLocation,
-      root: pageRoot,
-      logic,
-      bindings: [],
-      cleanups: [],
-      transportState: {
-        loading: false,
-        error: null
-      },
-      requestState: {}
-    };
-
-    pageRoot.dataset.brxRoute = route.id;
-    this.current = instance;
-    this.lastRouteSnapshot = {
-      route,
-      params: clone(matched.params),
-      location: nextLocation
-    };
-    this.applyDocumentMetadata(route);
-
-    await this.resolveUses(instance.root);
-    await this.flushDatastar();
-
-    if (navigationToken !== this.navigationToken) {
-      return;
-    }
-
-    this.bindTree(instance);
-    this.renderBindings(instance);
-
-    if (typeof logic.mount === 'function') {
-      const maybeCleanup = await logic.mount(this.createCtx(instance));
-      if (typeof maybeCleanup === 'function') {
-        instance.cleanups.push(maybeCleanup);
-      }
-    }
-
-    if (navigationToken !== this.navigationToken) {
-      return;
-    }
-
-    this.routeState.loading = false;
-    this.emitDebugEvent('route-mounted', {
-      id: route.id,
-      path: nextLocation.path
-    });
-    this.scrollAfterNavigation(nextLocation, options);
   }
 }
 

@@ -3,6 +3,11 @@ export const PAGE_MANIFEST_FIELDS = [
   'html',
   'logic',
   'route',
+  'alias',
+  'aliases',
+  'params',
+  'redirectTo',
+  'preload',
   'title',
   'meta',
   'seo',
@@ -40,6 +45,32 @@ export const PAGE_MANIFEST_SCHEMA = {
     route: {
       type: 'string',
       description: 'Optional route pattern or path.'
+    },
+    alias: {
+      type: 'string',
+      description: 'Optional alias route path.'
+    },
+    aliases: {
+      type: 'array',
+      description: 'Optional alias route paths.',
+      items: {
+        type: 'string'
+      }
+    },
+    params: {
+      type: 'object',
+      description: 'Optional param validation rules keyed by param name.',
+      additionalProperties: {
+        type: 'string'
+      }
+    },
+    redirectTo: {
+      type: 'string',
+      description: 'Optional redirect target for this route.'
+    },
+    preload: {
+      type: 'string',
+      description: 'Optional preload policy such as render or idle.'
     },
     title: {
       type: 'string',
@@ -114,13 +145,19 @@ export function page(definition) {
     throw new Error(`Brackets page("${definition.id}") requires a non-empty html reference`);
   }
 
-  for (const field of ['logic', 'route', 'title', 'layout']) {
+  for (const field of ['logic', 'route', 'alias', 'redirectTo', 'preload', 'title', 'layout']) {
     if (definition[field] !== undefined && typeof definition[field] !== 'string') {
       throw new Error(`Brackets page("${definition.id}").${field} must be a string when provided`);
     }
   }
 
-  for (const field of ['meta', 'seo', 'auth', 'assets', 'api', 'data']) {
+  if (definition.aliases !== undefined) {
+    if (!Array.isArray(definition.aliases) || definition.aliases.some((value) => typeof value !== 'string')) {
+      throw new Error(`Brackets page("${definition.id}").aliases must be an array of strings when provided`);
+    }
+  }
+
+  for (const field of ['params', 'meta', 'seo', 'auth', 'assets', 'api', 'data']) {
     assertRecord(definition[field], field);
   }
 

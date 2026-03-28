@@ -141,7 +141,7 @@ const FRAMEWORK_EVENT_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const FRAMEWORK_ACTION_CALL_PATTERN = /^([A-Za-z_$][A-Za-z0-9_$]*)\s*\(([\s\S]*)\)$/;
 const FRAMEWORK_HELPERS = new Map([
   ['mutate', { runtimeTarget: 'window.BracketsRuntime.mutate' }],
-  ['read', { runtimeTarget: 'window.BracketsRuntime.read' }],
+  ['read', { runtimeTarget: 'window.BracketsRuntime.read', nativeAction: '@get' }],
   ['request', { runtimeTarget: 'window.BracketsRuntime.request', nativeAction: '@get' }],
   ['get', { runtimeTarget: 'window.BracketsRuntime.get', nativeAction: '@get' }],
   ['create', { runtimeTarget: 'window.BracketsRuntime.create', nativeAction: '@post' }],
@@ -258,6 +258,56 @@ function splitTopLevelArguments(source) {
   return args;
 }
 
+function unwrapQuotedString(value) {
+  const trimmed = value.trim();
+  if (trimmed.length < 2) {
+    return null;
+  }
+
+  const quote = trimmed[0];
+  if ((quote !== '\'' && quote !== '"') || trimmed.at(-1) !== quote) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(`"${trimmed.slice(1, -1).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+  } catch {
+    return trimmed.slice(1, -1);
+  }
+}
+
+function isNativeMutatePath(pathExpression) {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(pathExpression);
+}
+
+function transformNativeMutate(expression, options = {}) {
+  if (options.skipNativeMutate) {
+    return null;
+  }
+
+  const match = expression.trim().match(FRAMEWORK_ACTION_CALL_PATTERN);
+  if (!match || match[1] !== 'mutate') {
+    return null;
+  }
+
+  const args = splitTopLevelArguments(match[2]);
+  if (args.length !== 2) {
+    return null;
+  }
+
+  const statePath = unwrapQuotedString(args[0]);
+  if (!statePath || !isNativeMutatePath(statePath)) {
+    return null;
+  }
+
+  const target = statePath
+    .split('.')
+    .map((segment, index) => index === 0 ? `$${segment}` : segment)
+    .join('.');
+
+  return `${target} = ${transformDatastarExpression(args[1], { ...options, skipNativeMutate: true })}`;
+}
+
 function mergeClassAttribute(attributeSource, classNames) {
   if (!classNames.length) {
     return attributeSource;
@@ -356,6 +406,11 @@ function shouldPreserveIdentifier(expression, identifier, startIndex, endIndex) 
 export function transformDatastarExpression(expression, options = {}) {
   if (!expression) {
     return expression;
+  }
+
+  const nativeMutate = transformNativeMutate(expression, options);
+  if (nativeMutate) {
+    return nativeMutate;
   }
 
   if (options.bindName) {

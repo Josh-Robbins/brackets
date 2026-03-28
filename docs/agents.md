@@ -50,6 +50,26 @@ Brackets adds:
 - the local `.data` contract
 - the backend-agnostic `.api` contract
 
+## Plugin guidance
+
+Do not assume Brackets needs a plugin API.
+
+In Brackets, most things a framework would call a plugin are just:
+
+- a `.logic` module
+- a `.api` module
+- a `.data` module
+- a reusable `.html` file
+- a browser ESM import
+- a worker or service worker
+- a host bridge
+
+Preferred AI behavior:
+
+1. solve the problem with normal Brackets files first
+2. use standard browser modules or backend services second
+3. only propose a framework-level plugin mechanism if a clear repeated gap remains after those two paths
+
 ## Non-negotiable rules
 
 1. Do not introduce a build step.
@@ -62,6 +82,7 @@ Brackets adds:
 8. Prefer the simplest possible app structure first.
 9. Add folders only when the app actually benefits from them.
 10. Compile to Datastar whenever Datastar already has the primitive.
+11. Do not invent a plugin API when normal Brackets files or browser modules solve the problem.
 
 ## Distribution model
 

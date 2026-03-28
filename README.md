@@ -132,6 +132,21 @@ Validate an app:
 node src/cli.js validate demo/app
 ```
 
+Inspect an app:
+
+```powershell
+node src/cli.js info demo/app
+node src/cli.js routes demo/app
+node src/cli.js routes demo/app --generate
+node src/cli.js doctor demo/app
+```
+
+Preview route generation without writing:
+
+```powershell
+node src/cli.js routes demo/app --generate --dry-run
+```
+
 Export an app:
 
 ```powershell

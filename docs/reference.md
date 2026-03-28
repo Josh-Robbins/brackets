@@ -41,9 +41,38 @@ This is the compact reference shape the project should stay aligned with.
 
 | Item | Meaning |
 |---|---|
-| `router.logic` | router engine |
+| `router.logic` | router engine and global router hooks |
 | `view.route` | optional route declaration in a `.view` file |
 | `/routes/*.logic` | grouped route registration for larger apps |
+
+Brackets routing is intentionally hybrid:
+
+- file-based routing comes from `.view` files
+- logic-based routing comes from `router.logic`
+- grouped logic-based routing comes from `/routes/*.logic`
+- all three can work together in one app without changing Brackets syntax
+
+Router precedence is:
+
+1. `router.logic` route declarations
+2. `/routes/*.logic` route declarations
+3. `.view` route declarations and file-derived defaults
+
+`router.logic` may also provide global hooks:
+
+- `beforeEach(ctx)` for redirects or route guards
+- `afterEach(ctx)` for post-navigation work
+- `notFound(ctx)` for redirects or custom not-found behavior
+
+Additive router powers that do not change Brackets syntax:
+
+- `defaults` in `router.logic` for shared layout, meta, auth, assets, params, and preload hints
+- `defaults` in `/routes/*.logic` for grouped route policy
+- `alias` and `aliases` for alternate route paths
+- `redirectTo` for lightweight redirect routes
+- `params` for param validation rules
+- `preload` for route warming hints such as `render` and `idle`
+- CLI route generation with `routes --generate` for apps that want Brackets to inspect `.html` files and create missing `.view` files automatically
 
 ### Page manifest
 
@@ -53,6 +82,11 @@ This is the compact reference shape the project should stay aligned with.
 | `html` | yes | page HTML reference |
 | `logic` | no | primary behavior module or inline logic |
 | `route` | no | route pattern or path |
+| `alias` | no | single alternate route path |
+| `aliases` | no | multiple alternate route paths |
+| `params` | no | route param validation rules |
+| `redirectTo` | no | redirect target for matched route |
+| `preload` | no | route preload hint such as `render` or `idle` |
 | `title` | no | document/page title |
 | `meta` | no | document metadata such as description |
 | `seo` | no | SEO/export metadata such as canonical, image, sitemap, and feed hints |
@@ -179,6 +213,13 @@ Notes:
 | cache refresh | `ctx.cache.refresh(key, loader, options)` |
 | cache invalidate | `ctx.cache.invalidate(key)` or `ctx.state.invalidate(key)` |
 
+### Security config
+
+| Setting | Meaning |
+|---|---|
+| `security.html: sanitize` | sanitize `:html` output before insertion |
+| `security.html: trusted` | allow raw `:html` output for intentionally trusted content |
+
 ### Website/export/runtime contracts
 
 | Contract | Meaning |
@@ -248,6 +289,23 @@ Brackets is also backend agnostic by design:
 - `.api` is the contract for remote/backend transport
 - `.data` is the contract for local persistence and storage adapters
 - `.json`, `.yaml`, and `.db` are storage formats the local side can use without changing the frontend language
+
+Brackets also does not need a framework-owned plugin API.
+
+Reason:
+
+- Brackets apps are already composed from normal files and modules
+- `.logic`, `.api`, `.data`, and `.html` are already extension surfaces
+- Datastar already covers the engine layer
+- browser modules, workers, service workers, host bridges, and backend services can be added directly
+
+So the preferred Brackets model is:
+
+- add normal code to the app
+- connect it through the existing file model
+- keep the framework contract small
+
+A plugin API would only make this heavier unless there is a truly unavoidable gap, and the current Brackets contract is intentionally designed so that gap should be rare.
 
 ## Syntax Families
 
@@ -514,6 +572,8 @@ The notes and follow-up review corrections lock this interpretation:
 - `read()` defaults to an SSE/live transport intent
 - `request()`, `get()`, `create()`, `update()`, `patch()`, and `delete()` default to HTTP transport intent
 - `.html`, `.sse`, `.state`, and `.json` describe how the result should be handled
+- simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
+- simple `read("/events")` expressions in transformed markup should compile toward Datastar-native request behavior when possible
 - `mutate()` is local signal/state mutation and has no transport mode
 
 This matters because it keeps Brackets aligned with Datastar's request model:

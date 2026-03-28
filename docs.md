@@ -68,6 +68,7 @@ Use it for:
 
 - host address
 - port number
+- HTML trust policy
 - splash title
 - splash tagline
 - accent and panel colors
@@ -80,6 +81,9 @@ Example:
 server:
   host: 127.0.0.1
   port: 4173
+
+security:
+  html: sanitize
 
 branding:
   name: Brackets
@@ -111,6 +115,110 @@ Brackets uses this to shape the first-run splash page and generate:
 - `/framework/demo/favicon.svg`
 
 The startup page is meant to feel alive and reassuring: clear readiness status, obvious next steps, and a polished first impression before you write your first page.
+
+`security.html` can be:
+
+- `sanitize` for the safe default
+- `trusted` only when the app intentionally wants raw HTML insertion
+
+## Plugins and extensions
+
+Brackets does not need a framework-owned plugin API.
+
+That is intentional.
+
+Why:
+
+- the app is already made of normal files
+- `.html`, `.logic`, `.api`, and `.data` are already extension points
+- Datastar already provides the reactive engine and request model
+- browser modules, CSS, Web Components, workers, service workers, and backend services can already be added directly
+- a plugin API would add framework ceremony, versioning friction, and lock-in where normal code already works
+
+In Brackets, most things people call a plugin are just:
+
+- another `.logic` file
+- another `.api` file
+- another `.data` file
+- another `.html` component or layout
+- a normal browser module imported by your app
+- a backend service connected through `.api`
+- a host bridge for desktop or native features
+
+That means the easiest path is also the most powerful path:
+
+- drop the code into `app/`
+- import it with normal ESM
+- connect it through `.logic`, `.api`, `.data`, or HTML
+- keep building
+
+You only need more structure when the app grows enough to want it.
+
+### How to add capabilities without a plugin API
+
+Add a browser helper:
+
+```js
+// app/format.logic
+import { formatDistanceToNow } from './vendor/date.js'
+
+({
+  mount({ state }) {
+    state.set({
+      updatedLabel: formatDistanceToNow(new Date())
+    })
+  }
+})
+```
+
+Add a remote integration:
+
+```js
+// app/crm.api
+({
+  listContacts({ http }) {
+    return http.client('/remote/crm').get('/contacts')
+  }
+})
+```
+
+Add local storage behavior:
+
+```js
+// app/preferences.data
+({
+  load({ storage }) {
+    return storage.json('./preferences.json').read({})
+  }
+})
+```
+
+Add reusable UI:
+
+```html
+<!-- app/card.html -->
+<article [card]>
+  <h2 :text="props.title"></h2>
+  <div :html="props.body"></div>
+</article>
+```
+
+Then use it normally:
+
+```html
+<section :use="'./card.html'" :props="{ title: 'Ready', body: trustedBody }"></section>
+```
+
+### When shared code should live outside one app
+
+If something is meant to be reused across many apps, prefer:
+
+- a copied or vendored module folder
+- a shared backend service
+- a host integration layer
+- a documented Brackets pattern in the public docs
+
+That keeps Brackets simple for app authors while still making advanced reuse possible.
 
 ## Minimal example
 
@@ -167,6 +275,8 @@ Read more:
 Use:
 
 - multiple `.view` files
+- optional `router.logic`
+- optional `/routes/*.logic`
 - optional shared layout
 - `:loading`
 - `:error`
@@ -177,6 +287,44 @@ Read more:
 
 - [SPA patterns](docs/guide.md#spa)
 - [Async and data patterns](docs/guide.md#async-and-data-patterns)
+
+### Routing
+
+Brackets routing can stay simple or become very powerful without changing syntax.
+
+You can use:
+
+- file-based routing with `.view` files
+- global router control with `app/router.logic`
+- grouped logic-based route registration with `app/routes/*.logic`
+
+These can work together in one app.
+
+Recommended shape:
+
+- use `.view` for the normal page path
+- use `router.logic` for guards, redirects, and router-wide policy
+- use `/routes/*.logic` when a larger app needs grouped route declarations
+
+Additive router powers:
+
+- `defaults` for shared route policy
+- `alias` and `aliases` for alternate paths
+- `redirectTo` for lightweight redirects
+- `params` for param validation
+- `preload` for route warming hints
+
+Read more:
+
+- [Reference: routing](docs/reference.md#routing)
+- [Guide: route patterns](docs/guide.md#spa)
+
+CLI superpower:
+
+- `node src/cli.js routes app --generate` scans your HTML files and creates missing `.view` files for you
+- it respects existing `.view` files instead of overwriting them
+- it works with loose app structure, so you do not have to create `pages/` or `views/` folders first
+- use `--dry-run` to preview what it would generate
 
 ### Backend-connected app
 
