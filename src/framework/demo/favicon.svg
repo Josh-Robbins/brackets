@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="128" height="128" rx="30" fill="{{PANEL}}"/>
-  <path d="M64 14L100 28L94 74L64 104L34 74L28 28L64 14Z" fill="{{ACCENT}}"/>
-  <path d="M64 22L94 34L89 72L64 96L39 72L34 34L64 22Z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.34)"/>
-  <path d="M52 38H40V86H52" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M76 38H88V86H76" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M58 62H70" stroke="{{INK}}" stroke-width="7" stroke-linecap="round"/>
+  <path d="M64 12L84 16L102 30L98 58L86 84L64 104L42 84L30 58L26 30L44 16L64 12Z" fill="{{ACCENT}}"/>
+  <path d="M64 20L80 24L94 36L91 58L81 79L64 94L47 79L37 58L34 36L48 24L64 20Z" fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.34)"/>
+  <path d="M53 42H42V78H53" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M75 42H86V78H75" stroke="{{INK}}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M58 60H70" stroke="{{INK}}" stroke-width="7" stroke-linecap="round"/>
 </svg>

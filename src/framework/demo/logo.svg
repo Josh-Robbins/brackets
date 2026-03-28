@@ -12,19 +12,19 @@
       <stop offset="1" stop-color="{{ACCENT}}"/>
     </linearGradient>
     <clipPath id="brx-shield-clip">
-      <path d="M162 44L244 72L232 174L162 232L92 174L80 72L162 44Z"/>
+      <path d="M162 42L220 54L252 84L244 136L220 190L162 232L104 190L80 136L72 84L104 54L162 42Z"/>
     </clipPath>
   </defs>
   <rect x="20" y="20" width="720" height="240" rx="42" fill="url(#brx-shell)"/>
-  <path d="M162 44L244 72L232 174L162 232L92 174L80 72L162 44Z" fill="url(#brx-glow)"/>
-  <path d="M162 56L230 80L220 168L162 216L104 168L94 80L162 56Z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.34)"/>
-  <path d="M162 68L218 88L210 161L162 201L114 161L106 88L162 68Z" fill="rgba(255,255,255,0.08)"/>
+  <path d="M162 42L220 54L252 84L244 136L220 190L162 232L104 190L80 136L72 84L104 54L162 42Z" fill="url(#brx-glow)"/>
+  <path d="M162 54L212 64L238 90L232 134L212 180L162 216L112 180L92 134L86 90L112 64L162 54Z" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.34)"/>
+  <path d="M162 66L204 74L226 96L221 132L204 170L162 200L120 170L103 132L98 96L120 74L162 66Z" fill="rgba(255,255,255,0.08)"/>
 
   <g clip-path="url(#brx-shield-clip)">
-    <path d="M138 90H112V190H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M186 90H212V190H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M150 140H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
-    <circle cx="162" cy="140" r="28" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
+    <path d="M138 100H112V182H138" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M186 100H212V182H186" stroke="{{INK}}" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M150 142H174" stroke="{{INK}}" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="162" cy="142" r="30" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>
   </g>
 
   <text x="316" y="86" fill="{{ACCENT}}" font-family="Segoe UI, system-ui, sans-serif" font-size="18" letter-spacing="0.28em">SUPERHUMAN HTML FRAMEWORK</text>
