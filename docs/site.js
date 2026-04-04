@@ -32,40 +32,29 @@ async function attachPlatformDownload() {
 
   const detectedPlatform = detectPlatform();
   const defaultPlatform = button.dataset.defaultPlatform || 'windows';
+  const releasePage = 'https://github.com/Josh-Robbins/brackets/releases/tag/v0.95';
+  const releaseBase = 'https://github.com/Josh-Robbins/brackets/releases/download/v0.95';
   const fallbackManifest = {
     version: 'v0.95',
-    universal: true,
+    universal: false,
+    releasePage,
     downloads: {
       windows: {
         label: 'Windows',
-        href: './downloads/Brackets-v0.95-windows.zip'
+        href: `${releaseBase}/Brackets-v0.95-windows.zip`
       },
       macos: {
         label: 'macOS',
-        href: './downloads/Brackets-v0.95-macos.zip'
+        href: `${releaseBase}/Brackets-v0.95-macos.zip`
       },
       linux: {
         label: 'Linux',
-        href: './downloads/Brackets-v0.95-linux.zip'
+        href: `${releaseBase}/Brackets-v0.95-linux.zip`
       }
     }
   };
 
-  let manifest = fallbackManifest;
-
-  try {
-    const response = await fetch('./downloads/release.json', {
-      headers: {
-        Accept: 'application/json'
-      }
-    });
-
-    if (response.ok) {
-      manifest = await response.json();
-    }
-  } catch {
-    manifest = fallbackManifest;
-  }
+  const manifest = fallbackManifest;
 
   const platformEntry =
     manifest.downloads?.[detectedPlatform] ||
@@ -79,12 +68,13 @@ async function attachPlatformDownload() {
   button.href = platformEntry.href;
   button.setAttribute('aria-label', `Download Brackets ${manifest.version || 'v0.95'} for ${platformEntry.label}`);
   button.textContent = `Download for ${platformEntry.label}`;
+  button.removeAttribute('download');
 
   if (note) {
     const universalNote = manifest.universal
       ? ' All downloads keep the same portable Brackets app model.'
-      : '';
-    note.textContent = `Install-free ${manifest.version || 'v0.95'} release. This page detected ${platformEntry.label} and linked the matching download.${universalNote}`;
+      : ` You can also open the full release page at ${manifest.releasePage}.`;
+    note.textContent = `Install-free ${manifest.version || 'v0.95'} release. This page detected ${platformEntry.label} and linked the matching GitHub Release download.${universalNote}`;
   }
 }
 
