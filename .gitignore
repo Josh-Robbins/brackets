@@ -2,6 +2,7 @@ node_modules/
 dist/
 static-out/
 release/
+.tmp-package/
 .DS_Store
 Thumbs.db
 demo/*.log

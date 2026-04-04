@@ -133,7 +133,7 @@ For most teams and evaluators, the best first workflow is:
 1. Start with one `.view`, one `.html`, and one `.logic`.
 2. Add `.data` as soon as state or persistence becomes real.
 3. Add `.api` only when the app needs shared authority or external services.
-4. Run `check` and `doctor --strict` often instead of waiting for confusion later.
+4. Run `config show`, `status server`, `health`, and `test app` often instead of waiting for confusion later.
 5. Keep files small enough that each one still has one honest job.
 
 ## Modern flat-file app model
@@ -357,10 +357,10 @@ If you can explain a file in one sentence, it is probably small enough:
 
 ### Type-safe file checks
 
-Use the no-build check path as part of the normal workflow:
+Use the built-in no-build verification path as part of the normal workflow:
 
 ```powershell
-node src/cli.js check demo/app
+cli.js test app
 ```
 
 It should catch:
@@ -416,7 +416,7 @@ Use:
 - `/feed.xml`
 - `/robots.txt`
 - `/manifest.webmanifest`
-- a portable export folder with `node src/cli.js export <app-root> --out-dir <folder>`
+- the same portable package folder served by the built-in host or another host
 
 ### Local-first app
 
@@ -439,6 +439,7 @@ Important boundary:
 - trusted shared authority is optional and belongs in `.api`
 - local browser-held or machine-held data should still be treated as untrusted for security decisions
 - host-managed session cookies should stay local-safe on HTTP and automatically upgrade to `Secure` cookies on HTTPS-style deployments
+- built-in-host POST transport should send the Brackets CSRF token automatically so state-changing RPC calls stay same-origin and session-bound
 
 ### Desktop app
 
@@ -512,6 +513,7 @@ Modern cache behavior should feel invisible:
 - live `read()` calls should fail with a clear framework error if the current host cannot provide SSE
 - live `read()` loading should remain visible until the SSE stream actually opens
 - live SSE failures should surface as clear Brackets errors instead of opaque browser event objects
+- built-in-host client errors should return stable framework codes, while unexpected server failures should stay generic and carry a request id for host logs
 - merged form payloads should preserve repeated values for multi-select and repeated field patterns
 - direct `FormData` payloads should work for form requests even when no DOM form element is available
 - local `.json`, `.yaml`, and encrypted storage writes should serialize cleanly so overlapping writes still leave readable data
@@ -826,7 +828,7 @@ Current no-build path:
 
 - generated `/manifest.webmanifest`
 - optional `/service-worker.js` at the app root, auto-registered when available on a trustworthy origin
-- static export support
+- optional service-worker-backed offline support
 
 The demo app includes a copyable no-build `service-worker.js` example.
 
@@ -894,48 +896,20 @@ For imperative downloads, use:
 
 Brackets now exposes:
 
-- `window.__BRACKETS_DEVTOOLS__.inspect()` for a runtime snapshot
-- `/__brackets/debug` for host/runtime inspection
-- `/__brackets/schema/page-manifest.json` for editor or AI schema validation
+- `/__brackets/host` for the live host contract
+- `/.well-known/brackets-host.json` for the public host contract
+- `/.well-known/brackets-app.json` for the app contract the runtime uses
+- `health`, `status server`, and `test app` through the root CLI
 
-The static export now also includes:
+## Verification
 
-- `framework/runtime.js`
-- `framework/datastar.js`
-- `framework/syntax.js`
-- `framework/docs.md`
-- `framework/agents.md`
-- `config/brackets.json`
-- `tests/test.js`
-- `manifest.webmanifest` when present
-- `service-worker.js` when present
+Use the working root CLI and host contract:
 
-## Validation and Export
-
-Validate:
-
-```powershell
-node src/cli.js validate demo/app
-```
-
-Validation returns issues plus warnings for accessibility and i18n gaps.
-
-Export:
-
-```powershell
-node src/cli.js export demo/app --out-dir dist
-```
-
-The exported folder is the portable deployment artifact. It now includes:
-
-- route HTML shells
-- `framework` runtime files
-- `config/brackets.json`
-- `tests/test.js`
-- `manifest.webmanifest` when present
-- `service-worker.js` when present
-- `README.md` when present
-- `LICENSE` when present
+- `config show` to inspect the live root config
+- `info` to confirm the package root, engine path, and entry file
+- `status server` to confirm the active origin
+- `health` to probe the running host
+- `test app` to run the bundled Deno framework checks
 
 ## What An App Should Not Do
 
@@ -963,4 +937,4 @@ Use this checklist for any new app:
 8. Use `:loading` / `:error` for async UI.
 9. Use `ctx.cache` for refresh/revalidation behavior.
 10. Use `ctx.auth` and route `auth` for protected flows.
-11. Validate before export or deployment.
+11. Run `health` and `test app` before deployment.

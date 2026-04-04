@@ -81,16 +81,17 @@
               <h2>First hour</h2>
               <ol>
                 <li>Download Brackets and unzip it anywhere.</li>
-                <li>Open the folder and look at <code>framework/</code>, <code>app/</code>, and <code>config/</code>.</li>
-                <li>Run <code>node src/cli.js check demo/app</code>.</li>
-                <li>Run <code>node src/cli.js doctor demo/app --strict</code>.</li>
+                <li>Open the folder and look at <code>framework/</code>, <code>app/</code>, <code>config.yaml</code>, and <code>index.html</code>.</li>
+                <li>Run <code>config show</code> and <code>info</code>.</li>
+                <li>Run <code>health</code> and <code>test app</code>.</li>
                 <li>Read the guide and start from one page, one template, and one behavior file.</li>
               </ol>
               <pre><code>Brackets/
   framework/
   app/
-  config/
   tests/
+  cli.js
+  config.yaml
   index.html
   README.md</code></pre>
             </section>
@@ -156,9 +157,10 @@
                 Brackets does not rely on a build step for safety. Use the built-in checks often and keep files small,
                 clear, and honest about their job.
               </p>
-              <pre><code>node src/cli.js check demo/app
-node src/cli.js doctor demo/app --strict
-node src/cli.js routes demo/app --json</code></pre>
+              <pre><code>config show
+info
+health
+test app</code></pre>
             </section>
 
             <section id="next">

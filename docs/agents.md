@@ -151,12 +151,12 @@ The starter should stay minimal:
 Brackets/
   framework/
   app/
-  config/
   tests/
+  cli.js
+  config.yaml
   index.html
   robots.txt
   README.md
-  LICENSE
 ```
 
 Do not force extra folders inside `app/`.
@@ -205,40 +205,25 @@ If the user asks for examples or a practical path forward, prefer linking them t
 
 - [docs.md](../docs.md)
 - [guide.md](./guide.md)
-- [demo/app](../demo/app)
+- `framework/demo/` for the starter assets only
 
 If the user asks about Docker, production deployment, or backend pairing, prefer these sections in [docs.md](../docs.md):
 
 - [Docker setup](../docs.md#docker-setup)
 - [Production setup](../docs.md#production-setup)
 
-### `config/`
+### Root config
 
-Optional framework/app configuration.
-
-Use for:
-
-- app settings
-- route defaults
-- host options
-- auth/session config
-- export rules
-- starter branding and splash settings
-
-Preferred config files:
-
-- `config/brackets.yaml`
-- `config/brackets.json`
-
-The config should stay human-readable and easy to edit.
+The main human-readable config file is root `config.yaml`.
 
 Use it to control:
 
-- local host address and port
-- starter branding
-- splash title, tagline, chips, and hints
-- generated `/framework/demo/logo.svg` and `/framework/demo/favicon.svg`
-- the starter page at `/framework/demo/splash.html`
+- runtime mode
+- host address and port
+- entry folder and route
+- external origin
+- health thresholds
+- branding and splash settings
 
 ### `tests/`
 
@@ -251,8 +236,6 @@ Tests should stay simple and flat by default.
 - `index.html` is the obvious entry point
 - `robots.txt` is the default website root file
 - `README.md` explains how to use the starter
-- `LICENSE` defines distribution terms
-
 Other top-level files may be added later only when needed.
 
 ## Public file model
@@ -648,17 +631,14 @@ Downloads should prefer:
 AI agents should know these built-in tools exist:
 
 - validation
-- export
 - host inspection
-- page manifest schema
-- debug inspection
+- package contract tests
 
 Useful endpoints and helpers:
 
-- `/__brackets/debug`
 - `/__brackets/host`
-- `/__brackets/schema/page-manifest.json`
-- `window.__BRACKETS_DEVTOOLS__.inspect()`
+- `/.well-known/brackets-host.json`
+- `/.well-known/brackets-app.json`
 
 ## What to generate for common app types
 

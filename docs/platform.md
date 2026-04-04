@@ -25,7 +25,7 @@ Current public hooks:
 - `ctx.cache.refresh(...)`
 - `ctx.cache.invalidate(...)`
 
-## 2. Website/SEO/Export Contract
+## 2. Website/SEO/Runtime Contract
 
 Route manifests may define:
 
@@ -41,18 +41,15 @@ The built-in host currently exposes:
 - `/manifest.webmanifest`
 - `/service-worker.js` when present
 
-The CLI currently supports:
+The root CLI currently supports:
 
-- `validate`
-- `export`
-
-Static export now carries:
-
-- route shells
-- `/manifest.webmanifest`
-- `/service-worker.js` when present
-- `/.well-known/brackets-host.json`
-- `/__brackets/schema/page-manifest.json`
+- `info`
+- `config show`
+- `run app`
+- `run app dev`
+- `status server`
+- `health`
+- `test app`
 
 ## 3. Auth/Session/Security Contract
 
@@ -148,18 +145,16 @@ Current contract:
 - no-build
 - file-first
 - works in desktop-folder, file-server, and paired-backend modes
-- exported folders include `framework/`, `app/`, `config/brackets.json`, and `tests/test.js`
+- the canonical package includes `framework/`, optional `app/`, root `config.yaml`, and `tests/test.js`
 
 ## 7. Tooling Contract
 
 Brackets now provides:
 
 - manifest validation through `page()`
-- app validation through the CLI
-- static export through the CLI
-- runtime inspection through `window.__BRACKETS_DEVTOOLS__.inspect()`
-- host inspection through `/__brackets/debug`
-- page manifest schema through `/__brackets/schema/page-manifest.json`
+- app verification through `test app`
+- host inspection through `/__brackets/host`
+- public host and app contracts through `/.well-known/brackets-host.json` and `/.well-known/brackets-app.json`
 - regression tests for syntax, runtime, server, transport, and storage
 
 Validation now reports:
@@ -205,7 +200,6 @@ Current no-build offline/PWA contract:
 - generated `/manifest.webmanifest`
 - optional root `/service-worker.js`
 - automatic service worker registration on trustworthy origins when available
-- static export preserves the manifest and service worker
 
 ## 12. Remaining Deepening Targets
 

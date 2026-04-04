@@ -42,11 +42,12 @@ You should be able to:
 If you are brand new to Brackets, do this first:
 
 1. Read this file once from top to bottom.
-2. Run `node src/cli.js check demo/app`.
-3. Run `node src/cli.js doctor demo/app --strict`.
-4. Start the demo host and click through the demo app.
+2. Start the root CLI entry for your OS.
+3. Run `info` and `config show`.
+4. Run `run app`, then open the local URL the built-in host reports.
 5. Read [docs/guide.md](./docs/guide.md) for practical patterns.
-6. Read [docs/reference.md](./docs/reference.md) only when you need the exact contract.
+6. Run `test app` to verify the package contract.
+7. Read [docs/reference.md](./docs/reference.md) only when you need the exact contract.
 
 That order keeps the framework approachable without hiding the deeper rules.
 
@@ -88,6 +89,7 @@ Datastar transfer boundary:
 - overlapping keyed requests should cancel superseded work without dropping the next request's loading state early
 - cached reads should deduplicate overlapping loads and preserve stale data during failed background refreshes
 - overlapping transport requests should keep page-level loading and error state aligned with the latest active request
+- older route/cache fetches should never overwrite newer payloads after a later request has already won
 - failed route warming and failed session refreshes should be retryable instead of leaving the runtime stuck in a poisoned state
 - protected routes should re-check session state before redirecting when the current session is missing or unauthenticated, so login recovery and paired-backend auth stay reliable
 - configured route prefetch should follow navigation, not just the first page load
@@ -107,8 +109,13 @@ Datastar-first implementation boundary:
 
 - `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, and `:set.*` should compile to native Datastar attributes
 - authored `@event` syntax should land on Datastar `data-on:*`
-- simple `read()`, `request()`, `get()`, `create()`, `update()`, `patch()`, `delete()`, and `mutate()` paths should compile to Datastar-native behavior when there is a clean one-to-one fit
+- `request()`, `get()`, `create()`, `update()`, `patch()`, `delete()`, and `mutate()` should compile to Datastar-native behavior when there is a clean one-to-one fit
+- `read()` should stay the framework live helper so the same syntax can drive both backend SSE and built-in flat-file live streams through the Deno host
 - only framework-specific surfaces such as `:use`, `:props`, `:area`, `:fill`, `:mount`, `:if`, `:each`, `:html`, `:loading`, and `:error` should stay on the Brackets-owned side
+- when two routes share the same layout, the runtime should keep that shell mounted and replace only the `:mount` area instead of repainting the whole page
+- nested framework-managed directives should keep running until the composition tree settles, instead of stopping after the first lucky pass
+- `:use` should ignore stale async template resolutions and rerender when the referenced template, props, or fills actually change
+- framework-managed directives should also rerun when existing directive attributes change in place, not only when nodes are added or removed
 
 That keeps the architecture modern without giving up the portable file-first model.
 
@@ -153,18 +160,17 @@ Example:
 ```text
 Brackets/
   framework/
-    demo/
   app/
     home.view
     home.html
     home.logic
-  config/
-    brackets.json
   tests/
+    test.js
+  cli.js
+  config.yaml
   index.html
   robots.txt
   README.md
-  LICENSE
 ```
 
 You do not need to create folders inside `app/` unless the app grows enough to need them.
@@ -192,15 +198,17 @@ It keeps apps:
 
 Brackets supports a simple config file for the host and starter experience.
 
-Preferred files:
+Preferred file:
 
-- `config/brackets.yaml`
-- `config/brackets.json`
+- `config.yaml`
 
 Use it for:
 
+- runtime mode
 - host address
 - port number
+- entry folder
+- external host origin
 - HTML trust policy
 - encrypted local storage key settings
 - splash title
@@ -212,9 +220,20 @@ Use it for:
 Example:
 
 ```yaml
-server:
-  host: 127.0.0.1
-  port: 4173
+runtime: embedded
+mode: dynamic
+engine: deno
+
+host: 127.0.0.1
+port: 4173
+
+entry:
+  folder: .
+  route: /
+  autoStart: false
+
+external:
+  origin: ""
 
 security:
   html: sanitize
@@ -241,7 +260,7 @@ splash:
     - Backend agnostic
   hints:
     - Edit files in app/
-    - Adjust settings in config/brackets.yaml
+    - Adjust settings in config.yaml
     - Use framework/docs.md and framework/agents.md when you need help
 ```
 
@@ -278,6 +297,8 @@ Current built-in host path:
 
 - set `BRACKETS_DATA_KEY` in the host environment, or change `security.storage.keyEnv`
 - use `storage['[e]json'](...)` or `storage['[e]yaml'](...)` inside `.data`
+- the built-in host stores encrypted JSON/YAML through an authenticated AES-GCM envelope
+- the encryption key stays outside the app data files and is derived from the configured host environment value
 - keep `.db` encryption host-specific unless the host can provide it safely
 
 Example:
@@ -305,6 +326,8 @@ Security rule:
 - it does not turn local data into trusted shared authority
 - auth, authorization, and shared truth should still live in a trusted host or backend when the app needs them
 - host-managed session cookies should stay local-safe on plain HTTP and upgrade to `Secure` host cookies automatically on HTTPS deployments
+- HTTPS deployments should prefer a secure host-prefixed CSRF cookie when the transport allows it
+- internal built-in-host POST requests should carry the Brackets CSRF token automatically and fail with a stable framework error code if the token does not match
 
 ## Type safety without a build step
 
@@ -321,18 +344,19 @@ So instead of depending on a compile step to catch bad shapes, Brackets validate
 First-class runtime contracts include:
 
 - `page()` manifests
-- `config/brackets.yaml` and `config/brackets.json`
+- root `config.yaml`
 - `.logic`, `.api`, and `.data` module exports
 - `router.logic` and `/routes/*.logic`
 - RPC payloads for `.api` and `.data`
 - duplicate page ids and route path collisions
 
-Use the CLI check when you want a no-build type report with file and line locations:
+Use the root CLI when you want a no-build package report:
 
-```powershell
-node src/cli.js check demo/app
-node src/cli.js check demo/app --json
-```
+- `info`
+- `config show`
+- `status server`
+- `health`
+- `test app` to run the bundled Deno framework test suite
 
 It should catch things like:
 
@@ -353,6 +377,7 @@ That means framework errors can include:
 
 - `error`
 - `code`
+- `requestId`
 - `issues`
 - `hint`
 
@@ -365,11 +390,11 @@ This is the no-build tradeoff done the right way:
 
 Recommended everyday quality loop:
 
-```powershell
-node src/cli.js check app
-node src/cli.js doctor app --strict
-node --test tests/test.js
-```
+1. Start the root CLI entry for your OS.
+2. Run `config show`.
+3. Run `run app`.
+4. Run `health`.
+5. Run `test app`.
 
 That is the shortest path to a serious Brackets app without introducing a build step.
 
@@ -439,7 +464,7 @@ Keep `.logic` focused on orchestration and user intent:
 })
 ```
 
-`ctx.action.input()` should stay friendly for normal forms: repeated field names should come through as arrays instead of being flattened away.
+`ctx.action.input()` should stay friendly for normal forms: normal input/change handlers should get the active control value, while submit handlers should get the current form payload. Repeated field names should come through as arrays instead of being flattened away.
 
 Good rule:
 
@@ -688,6 +713,7 @@ Recommended shape:
 - use `.view` for the normal page path
 - use `router.logic` for guards, redirects, and router-wide policy
 - use `/routes/*.logic` when a larger app needs grouped route declarations
+- the built-in router now honors that precedence directly: `router.logic`, then grouped route logic, then `.view`
 
 Additive router powers:
 
@@ -724,12 +750,11 @@ Read more:
 - [Reference: routing](docs/reference.md#routing)
 - [Guide: route patterns](docs/guide.md#spa)
 
-CLI superpower:
+Router note:
 
-- `node src/cli.js routes app --generate` scans your HTML files and creates missing `.view` files for you
-- it respects existing `.view` files instead of overwriting them
-- it works with loose app structure, so you do not have to create `pages/` or `views/` folders first
-- use `--dry-run` to preview what it would generate
+- route discovery is already ready for `.view` manifests under `app/`
+- `router.logic` and grouped route logic can layer on top of those file routes
+- route-target helpers keep navigation readable without changing Brackets syntax
 
 ### Backend-connected app
 
@@ -883,6 +908,23 @@ Use this for:
 - `.yaml` config/content
 - `.db` SQLite files
 
+Current bundled-host note:
+
+- `.json` and `.yaml` storage helpers are working today
+- `.db` storage is working through the bundled host today
+- live `.data` updates can stream through the same built-in host over SSE
+- `ctx.cache.fetch(...)`, `ctx.cache.refresh(...)`, and `ctx.cache.invalidate(...)` are available in the runtime for framework-level caching without changing syntax
+- `ctx.cache.fetch(...)` also supports stale-while-revalidate refreshes when an app wants cached reads to stay responsive while newer data is loading
+- `ctx.auth.session()` and `ctx.auth.refresh()` are available through the runtime session contract
+- `ctx.auth.session()` reuses a short-lived in-memory session snapshot while `ctx.auth.refresh()` forces a new host read and updates the active CSRF token if it changed
+- `ctx.nav.download(...)` is available for normal download handoffs
+- `:loading="name"` and `:error="name"` now use the framework request-state path while still rendering through Datastar-native DOM behavior
+- route preload hints such as `render` and `idle` now warm route renders through the built-in runtime
+- invalidated `preload: 'idle'` routes stay on the idle warm path instead of being forced immediately
+- same-host `.data` and `.api` writes now push live `read()` subscribers immediately instead of waiting for the next poll interval
+- same-host `.data` and `.api` writes also invalidate dependent route renders automatically when a route declares those `data` or `api` dependencies in its `.view` manifest
+- same-host `.data` and `.api` reads should not invalidate dependent routes or cache entries by default
+
 ### Docker with a backend
 
 For backend-connected apps, keep Brackets on the same origin as the backend whenever possible.
@@ -962,8 +1004,8 @@ In Brackets, prefer:
 The clean production shape is:
 
 1. finish the Brackets app as plain files
-2. validate the app
-3. export or assemble the release folder
+2. run `health` and `test app`
+3. assemble the release folder
 4. serve that folder from a web container or reverse proxy
 5. run the backend in a separate container if needed
 6. mount writable storage separately
@@ -1068,6 +1110,7 @@ Keep these security rules:
 - do not rely on permissive CORS as the normal solution
 - keep CSRF protection on state-changing routes
 - keep security headers enabled
+- keep internal 5xx responses generic and log detailed server failures with a request id
 - keep secrets in environment or a secret store
 - do not make storage world-writable
 - do not put trusted secrets into client state
@@ -1133,8 +1176,6 @@ When you need more than the basics, use these:
 
 Use these as living examples that can grow over time and work well on GitHub:
 
-- [Demo app](demo/app)
-- [Demo remote backend](demo/remote)
 - [Guide examples](docs/guide.md)
 
 ## For AI agents

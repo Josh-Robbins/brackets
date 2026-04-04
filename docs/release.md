@@ -38,14 +38,13 @@ Brackets/
       logo.svg
       favicon.svg
   app/
-  config/
-    brackets.json
   tests/
     test.js
+  cli.js
+  config.yaml
   index.html
   robots.txt
   README.md
-  LICENSE
 ```
 
 That folder is the product.
@@ -123,8 +122,8 @@ The intended dev experience is:
 1. Copy or create a Brackets app folder.
 2. Edit `.view`, `.html`, `.logic`, `.api`, `.data`, and storage files directly.
 3. Run the optional local host only when same-origin serving or local file-backed behavior is needed.
-4. Validate the app contract.
-5. Export a portable folder when desired.
+4. Run `status server`, `health`, and `test app` as the built-in verification path.
+5. Assemble the portable folder directly when desired.
 
 The important part is that Brackets remains usable as files first.
 
@@ -133,7 +132,7 @@ The important part is that Brackets remains usable as files first.
 The intended production experience is:
 
 1. Finish the app in the same file model used during development.
-2. Export or assemble the portable folder.
+2. Assemble the portable folder.
 3. Copy the folder to the deployment target.
 4. Serve it as a site, file-backed app, or paired-backend app.
 
@@ -151,7 +150,7 @@ To feel production-ready, a Brackets release should include:
 - the `framework` folder
 - the `framework/demo` starter assets
 - the `app` folder
-- the `config/brackets.json` contract
+- the root `config.yaml` contract
 - the starter `tests/test.js`
 - docs that explain desktop-folder, file-server, and paired-backend use clearly
 

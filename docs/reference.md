@@ -51,6 +51,7 @@ Brackets routing is intentionally hybrid:
 - logic-based routing comes from `router.logic`
 - grouped logic-based routing comes from `/routes/*.logic`
 - all three can work together in one app without changing Brackets syntax
+- when two routes share the same layout, Brackets keeps that shell mounted and updates only the `:mount` region
 
 Router precedence is:
 
@@ -72,7 +73,6 @@ Additive router powers that do not change Brackets syntax:
 - `redirectTo` for lightweight redirect routes
 - `params` for param validation rules
 - `preload` for route warming hints such as `render` and `idle`
-- CLI route generation with `routes --generate` for apps that want Brackets to inspect `.html` files and create missing `.view` files automatically
 - route-target helpers so navigation can use route ids plus params/query/hash instead of raw strings
 
 ### Page manifest
@@ -97,6 +97,19 @@ Additive router powers that do not change Brackets syntax:
 | `api` | no | named remote dependencies |
 | `data` | no | named local-data dependencies |
 
+Route dependency rule:
+
+- `data` and `api` dependencies are preserved in the discovered route contract
+- same-host `.data` and `.api` writes invalidate dependent route renders automatically
+- preload-enabled dependent routes are warmed again after those writes so route reuse stays fast
+
+Auth rule:
+
+- built-in route auth checks honor `required`, `public`, and `roles`
+- redirect policy prefers `auth.redirectTo`, `auth.login`, or `auth.path`
+- role-mismatch redirects prefer `auth.forbidden`, then fall back to `auth.unauthorized`, `auth.redirectTo`, `auth.login`, or `auth.path`
+- the runtime re-checks session state once before following an unauthenticated route redirect so recovered same-origin sessions can continue without a dead redirect hop
+
 ### No-build type safety
 
 Brackets does not depend on a build step for type safety.
@@ -104,7 +117,7 @@ Brackets does not depend on a build step for type safety.
 Instead, important framework contracts are validated at runtime:
 
 - `page()` manifests
-- `config/brackets.yaml` / `config/brackets.json`
+- root `config.yaml`
 - `.logic` module exports
 - `.api` and `.data` module exports
 - `router.logic` and `/routes/*.logic`
@@ -114,10 +127,29 @@ Structured framework errors should prefer:
 
 - `error` for the main message
 - `code` for stable programmatic handling
+- `requestId` for host-side correlation without leaking the raw stack
 - `issues` for field-level contract failures
 - `hint` for the next corrective step
 
 This keeps no-build authoring simple while still making bad shapes fail early and clearly.
+
+### Root config
+
+The current root-package host config lives in `config.yaml`.
+
+Important fields:
+
+| Field | Meaning |
+|---|---|
+| `runtime` | `embedded` for the built-in Deno host, `external` for another host you run yourself |
+| `mode` | framework serving mode |
+| `engine` | host engine name such as `deno` or `custom` |
+| `host` | bind address for the built-in host |
+| `port` | bind port for the built-in host |
+| `entry.folder` | package folder the host treats as the entry root |
+| `entry.route` | first app route used when `entry.autoStart` is enabled |
+| `entry.autoStart` | whether the starter hands off into the app route automatically |
+| `external.origin` | full origin Brackets should probe in external host mode |
 
 ### Context
 
@@ -135,9 +167,10 @@ This keeps no-build authoring simple while still making bad shapes fail early an
 
 Common helper surface inside grouped context:
 
-- `ctx.action.input()` reads the current control or current form payload
+- `ctx.action.input()` reads the current control value for normal input/change events and the current form payload for submit flows
 - `ctx.action.formData()` returns raw multipart-friendly `FormData` for upload flows
 - `ctx.action.files(name?)` returns selected files from the active input or form
+- repeated form field names stay grouped as arrays when `ctx.action.input()` returns a form payload
 - `ctx.nav.to(target)`, `ctx.nav.replace(target)`, and `ctx.nav.redirect(target)` accept either a path string or a route target object
 - `ctx.nav.href(target)` builds a stable href from that same target shape
 - `ctx.nav.isActive(target)` and `ctx.nav.match(target)` keep active-route checks readable
@@ -147,7 +180,13 @@ Common helper surface inside grouped context:
 - `ctx.nav.download(path, filename?)` triggers a normal download without inventing a separate client API
 - `ctx.cache.fetch(...)`, `ctx.cache.refresh(...)`, and `ctx.cache.invalidate(...)` manage Brackets cache state
 - `ctx.auth.session()` and `ctx.auth.refresh()` expose session state
+- `ctx.auth.authenticated` gives a cheap boolean view of the current in-memory session snapshot
 - router hook contexts should expose the same route-aware helpers through `ctx.to`, `ctx.from`, and `ctx.routes`
+
+Session rule:
+
+- `ctx.auth.session()` may reuse a short-lived in-memory session snapshot so repeated reads stay cheap
+- `ctx.auth.refresh()` forces a new host session read and updates the active CSRF token when the host rotates it
 
 ### Lifecycle
 
@@ -194,6 +233,12 @@ Common helper surface inside grouped context:
 | `patch()` | partial update |
 | `delete()` | delete record |
 | `mutate()` | local state mutation |
+
+### Runtime rendering
+
+- route changes should preserve the active shell whenever the next route uses the same layout
+- in that case Brackets should update only the `:mount` region instead of replacing the whole routed page container
+- `read()` stays on the same runtime path so live SSE updates and partial DOM updates work together cleanly
 
 ### `.api` helper surface
 
@@ -242,6 +287,7 @@ Optional host capability:
 
 - `storage['[e]json'](...)` for encrypted JSON at rest
 - `storage['[e]yaml'](...)` for encrypted YAML at rest
+- the built-in Deno host currently uses an authenticated AES-GCM envelope with the key sourced from `security.storage.keyEnv`
 
 ### Async/data UX
 
@@ -254,6 +300,17 @@ Optional host capability:
 | cache refresh | `ctx.cache.refresh(key, loader, options)` |
 | cache invalidate | `ctx.cache.invalidate(key)` or `ctx.state.invalidate(key)` |
 
+Notes:
+
+- `ctx.cache.fetch(...)` can keep a cached value hot while refreshing in the background with `staleWhileRevalidate: true`
+- route preload hints such as `preload: 'render'` and `preload: 'idle'` warm route renders through the built-in runtime without changing Brackets syntax
+- invalidated `preload: 'idle'` routes stay on the idle warm path instead of being forced immediately
+- same-host `.data` and `.api` writes now push live `read()` subscribers immediately instead of waiting for the next polling interval
+- same-host `.data` and `.api` writes also invalidate dependent route renders and their matching route-cache entries automatically
+- same-host `.data` and `.api` reads should not invalidate dependent routes or route-cache entries by default
+- older overlapping route/cache fetches should not be able to overwrite a newer payload after a later request has already won
+- failed session refreshes do not poison the runtime cache path; later refreshes can still recover cleanly
+
 ### Security config
 
 | Setting | Meaning |
@@ -262,8 +319,14 @@ Optional host capability:
 | `security.html: trusted` | allow raw `:html` output for intentionally trusted content |
 | `security.storage.keyEnv` | host environment variable that provides the encrypted storage key |
 | `security.storage.pbkdf2Iterations` | host-side key stretching cost for encrypted local persistence |
+| internal POST transport | automatically sends the Brackets CSRF token to the built-in host |
 
-### Website/export/runtime contracts
+Cookie note:
+
+- plain HTTP local development keeps the CSRF cookie local-safe with `SameSite=Lax`
+- HTTPS hosts upgrade the CSRF cookie to a secure host-prefixed cookie when the transport supports it
+
+### Website/runtime contracts
 
 | Contract | Meaning |
 |---|---|
@@ -272,8 +335,8 @@ Optional host capability:
 | `/robots.txt` | robots output with sitemap reference |
 | `/__brackets/host` | host capability contract |
 | `/.well-known/brackets-host.json` | public host capability contract |
-| `validate` | framework contract validation command |
-| `export` | static shell export command |
+| `/.well-known/brackets-app.json` | public app contract |
+| `test app` | bundled Deno package contract test |
 
 ### Final recommendations
 
@@ -300,6 +363,13 @@ Optional host capability:
 21. Solve `ctx.` fatigue with grouped destructuring, not hidden magic locals.
 22. Keep the v1 `ctx` shape small, grouped, and teachable.
 23. Keep v1 small, coherent, and teachable.
+
+### Sitemap and feed rules
+
+- `/sitemap.xml` includes public non-redirect routes unless `seo.sitemap` is explicitly `false`
+- `/feed.xml` includes routes that opt in with `seo.feed`
+- feed items prefer `seo.feed.title`, `seo.feed.summary`, and route `meta.description`
+- both outputs prefer `seo.canonical` when present
 
 ## Reading This Reference
 
@@ -400,11 +470,11 @@ Datastar note:
 | `:run="..."` | Run an expression when the element/template becomes live. Useful for setup requests or startup behavior from markup. | Best fit is Datastar `data-init` when this is element-init behavior. It is distinct from `.logic run(payload, ctx)`. | `Locked` |
 | `:watch="..."` | Run side effects when referenced values change. | Maps cleanly to Datastar `data-effect`, which Datastar documents as the side-effect hook. | `Locked` |
 | `:text="..."` | Bind text content. | Maps directly to Datastar `data-text`. | `Locked` |
-| `:html="..."` | Bind HTML content instead of text. | There is no documented free-core `data-html` attribute in the Datastar attributes reference. Brackets must treat this as trusted-only HTML insertion or a carefully scoped plugin/patching mechanism. | `Locked` |
+| `:html="..."` | Bind HTML content instead of text. | There is no documented free-core `data-html` attribute in the Datastar attributes reference, so Brackets owns this directive and applies a conservative sanitizer unless `security.html: trusted` is set. | `Locked` |
 | `:show="..."` | Show or hide an element based on an expression. | Maps directly to Datastar `data-show`. | `Locked` |
 | `:bind="..."` | Two-way bind user input to state. | Maps directly to Datastar `data-bind`. | `Locked` |
-| `:if="..."` | Conditional rendering. | Locked in the Brackets language, but not shown as a free-core Datastar attribute in the official attributes reference. Brackets likely needs a template transform that still lands on Datastar's signal and patch model. | `Locked` |
-| `:each="..."` | Loop/repetition over a collection. | Locked in the Brackets language, but not shown as a free-core Datastar attribute in the official attributes reference. Brackets likely needs a template transform that still lands on Datastar's signal and patch model. | `Locked` |
+| `:if="..."` | Conditional rendering. | Locked in the Brackets language. Brackets owns the conditional mount/update behavior while Datastar continues to drive the live DOM underneath. | `Locked` |
+| `:each="..."` | Loop/repetition over a collection. | Locked in the Brackets language. Brackets owns the repeated template composition while Datastar keeps the rendered result reactive. | `Locked` |
 
 ### Notes on `:run`
 
@@ -440,10 +510,10 @@ These directives are where Brackets most clearly adds framework structure above 
 
 | Syntax | Meaning in Brackets | Datastar relation | Status |
 |---|---|---|---|
-| `:use="..."` | Load or compose another template/component/layout by name or path. | Framework-level composition. Datastar does not define `data-use`. Brackets should implement this as template wiring above Datastar. | `Locked` |
-| `:props="..."` | Pass inputs into the thing being used. | Framework-level component/layout input contract. Datastar can carry the resulting values as signals, but `:props` itself is Brackets vocabulary. | `Locked` |
-| `:area="..."` | Declare a named layout placeholder. | Framework-level layout vocabulary. Datastar handles the reactivity after composition is resolved. | `Locked` |
-| `:fill="..."` | Provide content for a named layout area. | Framework-level layout vocabulary. | `Locked` |
+| `:use="..."` | Load or compose another template/component/layout by name or path. | Framework-level composition. Datastar does not define `data-use`, so Brackets resolves the template through the same host and then lets Datastar run the result. | `Locked` |
+| `:props="..."` | Pass inputs into the thing being used. | Framework-level component/layout input contract. Brackets turns these into local signals for the used block so inner Datastar bindings stay simple. | `Locked` |
+| `:area="..."` | Declare a named layout placeholder. | Framework-level layout vocabulary. Brackets resolves fills into these areas before the composed DOM keeps running under Datastar. | `Locked` |
+| `:fill="..."` | Provide content for a named layout area. | Framework-level layout vocabulary. Brackets moves fill content into matching areas during composition. | `Locked` |
 | `:mount` | Mark the primary routed render target. | Framework-level router/layout vocabulary. Datastar then handles the mounted DOM reactively. | `Locked` |
 
 General rule:
@@ -452,6 +522,9 @@ General rule:
 - `:area` and `:fill` are the composition system.
 - `:use` and `:props` describe what gets loaded and what inputs it receives.
 - for component/template composition, `:props` should become local signals for the used block so inner Datastar bindings can stay simple
+- template composition should ignore stale async template resolutions and rerender when the referenced template stamp, props, or fills change
+- nested `:use`, `:fill`, `:if`, and `:each` trees should keep settling until the composed DOM reaches a stable result
+- framework-managed directives should rerun when existing directive attributes change in place, not only when new nodes are patched into the DOM
 
 ## Dynamic DOM Directives
 
@@ -461,14 +534,14 @@ These items do appear in the later review docs, but they are less fully reasoned
 |---|---|---|---|
 | `:class.name="..."` | Toggle or bind a class reactively. | Maps cleanly to Datastar `data-class:name`. | `Review-doc present` |
 | `:set.name="..."` | Set a normal HTML attribute reactively. | Maps cleanly to Datastar `data-attr:name`. | `Review-doc present` |
-| `:loading="..."` | Surface loading state in markup. | Datastar has `data-indicator` for request-in-flight signals, plus `data-show`, `data-class`, and `data-attr` to render loading state. Brackets should probably compile to those primitives rather than invent a second loading system. | `Review-doc present` |
-| `:error="..."` | Surface request or validation error state in markup. | Datastar does not document a native `data-error` attribute in the free-core attributes reference. Brackets likely needs to treat this as authoring sugar over explicit error signals, fetch lifecycle events, or framework-managed state. | `Review-doc present` |
+| `:loading="..."` | Surface loading state in markup. | Brackets binds request-state keys to Datastar-native visibility updates instead of inventing a second DOM engine. | `Review-doc present` |
+| `:error="..."` | Surface request or validation error state in markup. | Brackets binds request-state keys to Datastar-native visibility and attribute updates for readable request failures. | `Review-doc present` |
 
 Recommendation:
 
 - Keep `:class.name` and `:set.name` in the v1 language reference because they have clear Datastar mappings.
-- Keep `:loading` and `:error` documented, but label them as thinner and not yet as fully settled as the core directives.
-- In the current framework direction, `:loading="name"` and `:error="name"` should be able to bind to request state keyed by transport or module name so common loading/error UI needs less manual state code.
+- Keep `:loading` and `:error` on the same request-state path as the router and transport helpers.
+- `:loading="name"` and `:error="name"` bind to request state keyed by route or request name and render through Datastar-native visibility and attribute updates.
 
 ## Built-In Expression Names And Scope Helpers
 
@@ -489,6 +562,7 @@ The important note direction is:
 
 - these helpers are sugar over Datastar signals
 - they are not a separate reactive store
+- in Datastar-backed expressions, Brackets resolves them through the runtime scope bridge instead of inventing a second client store
 
 That is especially important for `parent`, `children`, and `props`.
 
@@ -543,6 +617,7 @@ Implementation note:
 
 - plain `get('/path')`, `create('/path')`, `update('/path')`, `patch('/path')`, and `delete('/path')` can compile directly to Datastar-native actions when no Brackets-only suffix behavior is being requested
 - plain `request('/path')` can compile directly to Datastar-native `@get('/path')` for the same reason
+- plain `read('/events')` should stay on the Brackets runtime side so the same syntax can drive backend SSE and built-in flat-file live streams through one helper path
 - on form submit, Brackets can add Datastar's `contentType: 'form'` option automatically for the simple one-argument helper path so forms stay terse
 - suffix-based or framework-specific transport behavior can still use a thin Brackets bridge as long as Datastar remains the underlying request/response model
 
@@ -595,8 +670,10 @@ Rule:
 
 - `.data` is the adapter/repository layer
 - `.json`, `.yaml`, and `.db` are the actual stored data files
+- the current bundled host supports `.json`, `.yaml`, and `.db` today
+- live `.data` reads can stream through the built-in SSE host path as well
 
-That lets Brackets stay backend agnostic while still supporting a complete local flat-file or SQLite-backed app experience through the built-in host.
+That keeps Brackets backend agnostic while still making the bundled host genuinely useful for local-first apps.
 
 ## Result Mode Suffixes
 
@@ -618,7 +695,7 @@ The notes and follow-up review corrections lock this interpretation:
 - `request()`, `get()`, `create()`, `update()`, `patch()`, and `delete()` default to HTTP transport intent
 - `.html`, `.sse`, `.state`, and `.json` describe how the result should be handled
 - simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
-- simple `read("/events")` expressions in transformed markup should compile toward Datastar-native request behavior when possible
+- simple `read("/events")` expressions in transformed markup should compile toward the Brackets live runtime helper
 - `mutate()` is local signal/state mutation and has no transport mode
 
 This matters because it keeps Brackets aligned with Datastar's request model:
@@ -729,7 +806,7 @@ Harmony rule:
 - authored `@event` syntax should always land on Datastar's `data-on:*` event system, including simple named actions such as `@click="refresh"`
 - the current native Datastar coverage should include `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, `:set.*`, and plain transport/event expressions
 - simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
-- simple `read("/events")` expressions in transformed markup should compile toward Datastar-native request behavior when possible
+- simple `read("/events")` expressions in transformed markup should compile toward the Brackets live runtime helper
 
 Items that are Brackets-first rather than Datastar-native:
 
@@ -774,9 +851,10 @@ Implication for Brackets:
 - if a sanitizer is supported, document it explicitly and keep it conservative
 - never imply that `:html` is safe for arbitrary untrusted user content
 
-Current framework direction:
+Current framework behavior:
 
-- framework-managed `:html` rendering should use a conservative sanitization pass by default
+- framework-managed `:html` rendering uses a conservative sanitization pass by default
+- transport responses handled as `.html` also follow that same sanitize-vs-trusted policy
 - truly trusted markup can still be rendered, but the framework should strip obviously dangerous sinks such as inline event handlers, `javascript:` URLs, and script tags
 
 ### 3. Client validation is UX, not security
@@ -801,7 +879,7 @@ Implication for Brackets:
 
 ### 5. Framework-only expressions should stay restricted
 
-Not every Brackets directive has a free-core Datastar equivalent. For the remaining framework-managed directives such as `:if`, `:each`, and `:html`, Brackets may still need local expression evaluation.
+Not every Brackets directive has a free-core Datastar equivalent. For the framework-managed directives such as `:if`, `:each`, `:html`, `:use`, `:props`, `:area`, and `:fill`, Brackets owns the composition/evaluation layer while Datastar stays the DOM engine underneath.
 
 Implication for Brackets:
 

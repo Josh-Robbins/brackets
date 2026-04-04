@@ -27,10 +27,11 @@ If you are evaluating Brackets for the first time, use this order:
 
 1. Read [Getting started](./docs.md)
 2. Skim [Guide](./docs/guide.md)
-3. Run `node src/cli.js check demo/app`
-4. Run `node src/cli.js doctor demo/app --strict`
-5. Start the demo and click through it
-6. Read [Reference](./docs/reference.md) only when you want the full contract
+3. Start the root CLI entry for your OS.
+4. Run `info` and `config show`.
+5. Run `run app`, then open the root `index.html` through the built-in host.
+6. Run `test app` to verify the package contract.
+7. Read [Reference](./docs/reference.md) only when you want the full contract
 
 ## Why Brackets
 
@@ -57,6 +58,7 @@ Runtime flow:
 2. the host/runtime manages local storage and database access
 3. `.logic` reads and writes
 4. `.view` / `.html` reacts through Datastar
+5. when two routes share the same layout, Brackets keeps that shell mounted and updates only the `:mount` region
 
 Datastar transfer boundary:
 
@@ -93,7 +95,7 @@ That means Brackets can stay portable and static in shape while still being full
 - `.html` for templates
 - `.view` for page manifests
 - `.logic` for behavior
-- `config/brackets.yaml` or `config/brackets.json` for human-readable setup
+- root `config.yaml` for human-readable setup
 
 ## Core Model
 
@@ -148,19 +150,17 @@ The smallest useful Brackets app can be just a few files:
 ```text
 Brackets/
   framework/
-    demo/
   app/
     home.view
     home.html
     home.logic
-  config/
-    brackets.yaml
   tests/
     test.js
+  cli.js
+  config.yaml
   index.html
   robots.txt
   README.md
-  LICENSE
 ```
 
 Brackets should not force folder ceremony too early. Start small and grow structure only when the app needs it.
@@ -177,64 +177,47 @@ This is the shortest way to keep a Brackets app clean:
 
 If you are unsure where code belongs, put it in the smallest layer that can own it honestly.
 
-## Demo
+## Built-in Host
 
-Run the mock remote backend:
+The root package is the thing the built-in host serves:
 
-```powershell
-node demo/remote/server.js
-```
+- root `index.html` is the entry page
+- root `config.yaml` controls runtime, host, and entry behavior
+- `entry.folder` decides which folder the host treats as the package entry root
+- when an `app/` folder exists, the router, `.view`, `.html`, `.logic`, `.data`, and `.api` layers are discovered from there
 
-Run the framework host:
+The simplest workflow is:
 
-```powershell
-node src/cli.js demo/app --port 4173 --proxy /remote=http://127.0.0.1:4174
-```
-
-Open:
-
-```text
-http://127.0.0.1:4173
-```
+1. Start the root CLI entry for your OS.
+2. Run `config show`.
+3. Run `run app`.
+4. Open the reported local URL.
+5. Run `health`, `status server`, and `test app` when you want to verify the framework.
 
 ## Workflow
 
-Validate an app:
+Inside the root CLI:
 
-```powershell
-node src/cli.js validate demo/app
-node src/cli.js check demo/app
-```
+- `info` shows the package root, engine path, runtime mode, and entry file
+- `config show` shows the live root config
+- `run app` starts the built-in Deno host in embedded mode
+- `run app dev` starts the built-in host in dev mode
+- `status server` shows the current local and network origins
+- `health` probes the running host
+- `test app` runs the bundled Deno framework test suite against the current package
 
-Inspect an app:
+External mode stays honest too:
 
-```powershell
-node src/cli.js info demo/app
-node src/cli.js routes demo/app
-node src/cli.js routes demo/app --generate
-node src/cli.js check demo/app --json
-node src/cli.js doctor demo/app
-```
-
-Preview route generation without writing:
-
-```powershell
-node src/cli.js routes demo/app --generate --dry-run
-```
-
-Export an app:
-
-```powershell
-node src/cli.js export demo/app --out-dir dist
-```
-
-The exported folder is the deployment artifact.
+- set `runtime: external`
+- set `external.origin`
+- start your outside host yourself
+- then use `status server`, `health`, and `test app` from the same CLI
 
 ## Tests
 
-```powershell
-node --test tests/test.js
-```
+The built-in verification path is `test app` from the root CLI.
+
+The package test file is still [`tests/test.js`](./tests/test.js), and `test app` runs it through the bundled Deno host instead of a separate Node test path.
 
 ## Distribution
 
@@ -273,24 +256,25 @@ The current prototype already includes:
 - a tiny same-origin host
 - Datastar-first syntax transforms
 - SPA routing with layout preservation
+- hybrid routing from `.view`, `router.logic`, and grouped route logic
 - route-level loading and error state hooks
 - optimistic state and cache helpers
 - `.data` adapters for `.json`, `.yaml`, and `.db`
-- SEO/export endpoints
-- debug and schema endpoints
+- built-in live SSE updates for `.data` modules through the same Deno host
+- website/runtime endpoints
+- host and app contract endpoints
 - a branded starter splash with real framework demo assets under `framework/demo/`
 
 What the current quality bar means:
 
-- full framework test suite is green
-- no-build `check` is green on the demo app
-- strict `doctor` is green on the demo app
-- the router, transport, `.data`, docs, and demo app all currently align with the documented contract
+- the built-in Deno package tests are green
+- the root CLI `test app` path is green
+- the router, transport, `.data`, and docs now align with the current root-package contract
 
 The main implementation lives in:
 
-- [server.js](C:\Users\joshr\Documents\dev\Brackets\src\server.js)
-- [runtime.js](C:\Users\joshr\Documents\dev\Brackets\src\runtime\runtime.js)
-- [syntax.js](C:\Users\joshr\Documents\dev\Brackets\src\syntax.js)
-- [data-adapters.js](C:\Users\joshr\Documents\dev\Brackets\src\data-adapters.js)
-- [tooling.js](C:\Users\joshr\Documents\dev\Brackets\src\tooling.js)
+- [server.js](C:\Users\joshr\Documents\dev\Brackets\framework\server.js)
+- [runtime.js](C:\Users\joshr\Documents\dev\Brackets\framework\runtime.js)
+- [syntax.js](C:\Users\joshr\Documents\dev\Brackets\framework\syntax.js)
+- [cli.js](C:\Users\joshr\Documents\dev\Brackets\cli.js)
+- [test.js](C:\Users\joshr\Documents\dev\Brackets\tests\test.js)

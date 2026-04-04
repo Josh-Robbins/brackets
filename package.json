@@ -1,20 +1,14 @@
 {
   "name": "brackets-framework",
-  "version": "0.1.0",
+  "version": "0.95.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node src/cli.js demo/app",
-    "help": "node src/cli.js help",
-    "demo": "node src/cli.js demo/app --port 4173 --proxy /remote=http://127.0.0.1:4174",
-    "demo:open": "node src/cli.js demo/app --port 4173 --proxy /remote=http://127.0.0.1:4174 --open",
-    "demo:remote": "node demo/remote/server.js",
-    "info": "node src/cli.js info demo/app",
-    "routes": "node src/cli.js routes demo/app",
-    "routes:generate": "node src/cli.js routes demo/app --generate",
-    "validate": "node src/cli.js validate demo/app",
-    "doctor": "node src/cli.js doctor demo/app",
-    "export": "node src/cli.js export demo/app --out-dir dist",
-    "test": "node --test tests/test.js"
+    "help": "deno run --allow-read --allow-write --allow-net --allow-run cli.js help",
+    "start": "deno run --allow-read --allow-write --allow-net --allow-run cli.js run app",
+    "dev": "deno run --allow-read --allow-write --allow-net --allow-run cli.js run app dev",
+    "info": "deno run --allow-read --allow-write --allow-net --allow-run cli.js info",
+    "health": "deno run --allow-read --allow-write --allow-net --allow-run cli.js health",
+    "test": "deno test --allow-read --allow-write --allow-net tests/test.js"
   }
 }

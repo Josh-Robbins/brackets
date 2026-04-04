@@ -1,0 +1,123 @@
+# Brackets root config
+#
+# This file controls how the built-in Deno host, runtime, and package entry work.
+# Keep this file at the root of the main Brackets folder.
+#
+# Most apps should start with:
+#   runtime: embedded
+#   mode: dynamic
+#   engine: deno
+#
+# If you want to use another host instead of the built-in Deno host:
+#   1. change runtime to external
+#   2. set engine to the host you want to use
+#   3. set external.origin to the full running app origin
+#   4. start that external server yourself
+#   5. use the Brackets CLI health / status / test commands against it
+
+# Framework identity.
+framework: Brackets
+version: 0.95.0
+
+# This is the app root the framework expects when you start building.
+# It does not have to exist yet, but this is the folder name Brackets will look for.
+app: app
+
+# Host runtime mode.
+#
+# embedded = use the built-in Deno host
+# external = use another host you run yourself
+runtime: embedded
+
+# Framework serving mode.
+#
+# dynamic = use the live Brackets router/server/runtime path
+# simple  = reserved for a lighter static-style host path later
+mode: dynamic
+
+# Engine name.
+#
+# deno   = built-in Deno host
+# custom = another host/runtime that serves the Brackets package correctly
+engine: deno
+
+# Built-in host bind settings.
+#
+# host: 127.0.0.1 = this machine only
+# host: 0.0.0.0   = expose to your local network
+host: 127.0.0.1
+port: 4173
+
+entry:
+  # Folder the host treats as the package entry root.
+  # "." means the main Brackets folder itself.
+  folder: .
+
+  # Route Brackets should treat as the first app route when autoStart is enabled.
+  route: /
+
+  # false = show the root index.html starter first
+  # true  = hand off into entry.route automatically
+  autoStart: false
+
+external:
+  # Full origin for an external host.
+  #
+  # Leave this empty while using the built-in Deno host.
+  # Example:
+  # origin: http://127.0.0.1:8080
+  origin: ""
+
+branding:
+  # Product name and starter-shell branding.
+  name: Brackets
+  title: Brackets
+  tagline: No build step. HTML first. Datastar underneath.
+
+  # Main visual theme colors for the framework starter shell.
+  accent: "#714cb6"
+  accentSoft: "#cdb8f3"
+  canvas: "#fcfaf7"
+  panel: "#ffffff"
+  ink: "#241013"
+  muted: "#5b5361"
+
+splash:
+  # true = allow the framework starter splash
+  # false = reserved for a more app-direct startup path later
+  enabled: true
+
+  # Short chips shown on the framework starter page.
+  chips:
+    - No build step
+    - Datastar engine
+    - Built-in Deno host
+
+  # Quick first-run hints shown on the starter page.
+  hints:
+    - Edit files in app/
+    - Keep templates in .html and behavior in .logic
+    - Use .data for local models and .api for backend transport
+
+security:
+  # HTML trust level for framework-managed HTML insertion.
+  #
+  # sanitize = safe default
+  # trusted  = only for intentionally trusted HTML
+  html: sanitize
+
+  storage:
+    # Environment variable name used for encrypted local persistence.
+    keyEnv: BRACKETS_DATA_KEY
+
+    # PBKDF2 iterations for host-side encrypted storage helpers.
+    pbkdf2Iterations: 250000
+
+health:
+  # Host timing thresholds used by the starter health card and CLI health checks.
+  hostWarnMs: 420
+  hostFailMs: 850
+
+  # App timing thresholds reserved for deeper runtime checks.
+  appWarnMs: 520
+  appFailMs: 950

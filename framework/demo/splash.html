@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TITLE}}</title>
+    <meta name="theme-color" content="{{THEME_COLOR}}" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="{{FAVICON_PATH}}" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=League+Spartan:wght@600;700;800&display=swap" />
+    <meta name="brackets-csrf" content="{{CSRF_TOKEN}}" />
+    <script type="application/json" id="brackets-session">{{SESSION_JSON}}</script>
+    <script type="application/json" id="brackets-host">{{HOST_JSON}}</script>
+    <script type="application/json" id="brackets-config">{{CONFIG_JSON}}</script>
+    <script type="importmap">{{IMPORT_MAP_JSON}}</script>
+    <script type="module" src="/framework/runtime.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: color-mix(in srgb, {{CANVAS}} 26%, #fcfaf7);
+        --bg-soft: color-mix(in srgb, {{CANVAS}} 12%, #f7f5f2);
+        --panel: rgba(255, 255, 255, 0.88);
+        --panel-strong: rgba(255, 255, 255, 0.96);
+        --ink: color-mix(in srgb, {{INK}} 78%, #241013);
+        --accent: color-mix(in srgb, {{ACCENT}} 46%, #714cb6);
+        --accent-strong: color-mix(in srgb, var(--accent) 72%, #533192);
+        --accent-soft: color-mix(in srgb, var(--accent) 18%, white);
+        --accent-soft-strong: color-mix(in srgb, var(--accent) 34%, white);
+        --muted: color-mix(in srgb, {{MUTED}} 72%, #241013);
+        --line: rgba(115, 113, 109, 0.18);
+        --line-strong: rgba(115, 113, 109, 0.28);
+        --shadow: 0 0 0 1px rgba(71, 69, 67, 0.04), 0 24px 48px -24px rgba(71, 69, 67, 0.22);
+        --shadow-large: 0 0 0 1px rgba(71, 69, 67, 0.04), 0 48px 96px -32px rgba(71, 69, 67, 0.22);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        position: relative;
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Inter", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 16%, rgba(190, 161, 245, 0.2), transparent 24%),
+          radial-gradient(circle at 86% 12%, rgba(191, 97, 147, 0.11), transparent 18%),
+          radial-gradient(circle at 78% 74%, rgba(113, 76, 182, 0.08), transparent 24%),
+          linear-gradient(180deg, #ffffff 0%, var(--bg) 52%, var(--bg-soft) 100%);
+        overflow-x: hidden;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        inset: auto;
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(28px);
+        opacity: 0.7;
+      }
+
+      body::before {
+        top: 4rem;
+        right: -8rem;
+        width: 24rem;
+        height: 24rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(212, 199, 255, 0.68), transparent 72%);
+      }
+
+      body::after {
+        bottom: 5rem;
+        left: -8rem;
+        width: 24rem;
+        height: 24rem;
+        border-radius: 999px;
+        background: radial-gradient(circle, rgba(191, 97, 147, 0.16), transparent 72%);
+      }
+
+      .brx-splash {
+        position: relative;
+        z-index: 1;
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 420px);
+        gap: 1.6rem;
+        width: min(1380px, calc(100% - 1rem));
+        margin: 0 auto;
+        padding: 1.6rem 0 2rem;
+      }
+
+      .brx-hero,
+      .brx-side {
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--panel) 92%, white);
+        border-radius: 16px;
+        box-shadow: var(--shadow-large);
+        backdrop-filter: blur(16px);
+      }
+
+      .brx-hero {
+        padding: 2.1rem;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .brx-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(135deg, rgba(255,255,255,0.2), transparent 38%),
+          radial-gradient(circle at 78% 26%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 30%);
+        pointer-events: none;
+      }
+
+      .brx-hero::before {
+        content: "";
+        position: absolute;
+        inset: 1rem;
+        border-radius: 20px;
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+        pointer-events: none;
+      }
+
+      .brx-topline {
+        display: inline-flex;
+        gap: 0.55rem;
+        align-items: center;
+        padding: 0.45rem 0.78rem;
+        border-radius: 999px;
+        background: rgba(232, 224, 255, 0.84);
+        border: 1px solid rgba(113, 76, 182, 0.12);
+        color: var(--accent-strong);
+        font-size: 0.74rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .brx-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.9rem;
+        text-decoration: none;
+        color: inherit;
+      }
+
+      .brx-brand-mark {
+        width: 3rem;
+        height: 3rem;
+        flex: 0 0 auto;
+        filter: drop-shadow(0 18px 32px rgba(36, 16, 19, 0.18));
+      }
+
+      .brx-brand-mark img {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .brx-brand-copy {
+        display: grid;
+        gap: 0.18rem;
+        line-height: 1;
+      }
+
+      .brx-brand-copy strong {
+        font-family: "League Spartan", "Inter", system-ui, sans-serif;
+        font-size: 1.16rem;
+        letter-spacing: -0.05em;
+        text-transform: uppercase;
+      }
+
+      .brx-brand-copy span {
+        color: var(--muted);
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .brx-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.9rem;
+      }
+
+      .brx-topnav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+      }
+
+      .brx-topnav a {
+        text-decoration: none;
+        padding: 0.8rem 1rem;
+        border-radius: 0.7rem;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.74);
+        box-shadow: 0 8px 24px -20px rgba(36, 16, 19, 0.3);
+        color: var(--ink);
+        transition: border-color 180ms ease, transform 180ms ease, background-color 180ms ease;
+      }
+
+      .brx-topnav a:hover,
+      .brx-topnav a:focus-visible {
+        transform: translateY(-1px);
+        border-color: rgba(113, 76, 182, 0.28);
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .brx-topnav a[data-brx-primary="true"] {
+        background: color-mix(in srgb, var(--accent) 88%, white);
+        border-color: transparent;
+        color: white;
+        box-shadow: 0 22px 36px -22px rgba(113, 76, 182, 0.66);
+      }
+
+      .brx-topnav a[data-brx-primary="true"]:hover,
+      .brx-topnav a[data-brx-primary="true"]:focus-visible {
+        background: var(--accent-strong);
+      }
+
+      .brx-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.85rem;
+        border-radius: 999px;
+        background: rgba(232, 224, 255, 0.84);
+        border: 1px solid rgba(113, 76, 182, 0.12);
+        color: var(--accent-strong);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+
+      .brx-inline-mark {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 0.14em;
+        vertical-align: -0.05em;
+      }
+
+      .brx-inline-mark img {
+        width: 1.05em;
+        height: 1.05em;
+        display: block;
+        filter: drop-shadow(0 14px 24px rgba(36, 16, 19, 0.18));
+      }
+
+      .brx-wordmark {
+        width: min(100%, 680px);
+        margin: 0;
+      }
+
+      .brx-wordmark-wrap {
+        display: grid;
+        gap: 0.55rem;
+        margin: 0.6rem 0 0.7rem;
+      }
+
+      .brx-wordmark-note {
+        color: var(--accent-strong);
+        font-size: 0.76rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .brx-copy {
+        max-width: 58rem;
+      }
+
+      .brx-copy h1 {
+        margin: 0 0 0.85rem;
+        font-family: "League Spartan", "Inter", system-ui, sans-serif;
+        font-size: clamp(3.4rem, 5.2vw, 5.9rem);
+        line-height: 0.84;
+        letter-spacing: -0.06em;
+        text-transform: uppercase;
+        max-width: 11ch;
+      }
+
+      .brx-copy p {
+        margin: 0;
+        max-width: 40rem;
+        color: var(--muted);
+        font-size: 1.02rem;
+        line-height: 1.56;
+      }
+
+      .brx-copy strong {
+        color: var(--ink);
+      }
+
+      .brx-chip-row,
+      .brx-action-row,
+      .brx-status-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .brx-chip-row:empty {
+        display: none;
+      }
+
+      .brx-chip,
+      .brx-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.65rem 0.9rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        backdrop-filter: blur(12px);
+      }
+
+      .brx-status strong {
+        color: var(--accent);
+      }
+
+      .brx-facts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.8rem;
+        margin-top: 1.1rem;
+      }
+
+      .brx-fact {
+        padding: 0.95rem 1rem;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(10px);
+      }
+
+      .brx-fact strong {
+        display: block;
+        margin-bottom: 0.3rem;
+        font-size: 0.98rem;
+      }
+
+      .brx-fact p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .brx-grid {
+        margin-top: 1.6rem;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.9rem;
+      }
+
+      .brx-scene {
+        position: relative;
+        margin-top: 0.9rem;
+        min-height: 13.2rem;
+        border-radius: 24px;
+        border: 1px solid color-mix(in srgb, var(--accent) 16%, #e7d9c8);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.92)),
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 14%, transparent), transparent 34%);
+        overflow: hidden;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+      }
+
+      .brx-scene::before {
+        content: "";
+        position: absolute;
+        inset: 1rem;
+        border-radius: 20px;
+        border: 1px solid rgba(255,255,255,0.65);
+        pointer-events: none;
+      }
+
+      .brx-scene-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(108, 98, 87, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(108, 98, 87, 0.06) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: linear-gradient(180deg, rgba(0,0,0,0.6), transparent 90%);
+      }
+
+      .brx-scene-glow {
+        position: absolute;
+        border-radius: 999px;
+        filter: blur(18px);
+        opacity: 0.55;
+      }
+
+      .brx-scene-glow--one {
+        width: 12rem;
+        height: 12rem;
+        right: 1rem;
+        top: -2rem;
+        background: color-mix(in srgb, var(--accent) 24%, white);
+      }
+
+      .brx-scene-glow--two {
+        width: 10rem;
+        height: 10rem;
+        left: -1rem;
+        bottom: -2rem;
+        background: color-mix(in srgb, var(--accent) 14%, white);
+      }
+
+      .brx-scene-stack {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(220px, 280px);
+        gap: 1rem;
+        padding: 1.25rem;
+        min-height: 100%;
+      }
+
+      .brx-scene-board,
+      .brx-scene-panel,
+      .brx-mini-card {
+        background: rgba(255,255,255,0.86);
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #e7d9c8);
+        box-shadow: 0 12px 28px rgba(31, 26, 23, 0.08);
+      }
+
+      .brx-scene-board {
+        position: relative;
+        border-radius: 18px;
+        padding: 1rem;
+        overflow: hidden;
+      }
+
+      .brx-scene-board::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,0.22), transparent 22%);
+        pointer-events: none;
+      }
+
+      .brx-scene-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+      }
+
+      .brx-toolbar-dots {
+        display: flex;
+        gap: 0.35rem;
+      }
+
+      .brx-toolbar-dots span {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 46%, white);
+      }
+
+      .brx-toolbar-pill {
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 10%, white);
+        color: var(--accent);
+        font-size: 0.76rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .brx-mini-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+      }
+
+      .brx-mini-card {
+        border-radius: 14px;
+        padding: 0.8rem;
+      }
+
+      .brx-mini-card strong {
+        display: block;
+        margin-bottom: 0.25rem;
+      }
+
+      .brx-mini-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.45;
+      }
+
+      .brx-mini-card--wide {
+        grid-column: 1 / -1;
+      }
+
+      .brx-scene-panel {
+        border-radius: 18px;
+        padding: 0.95rem;
+        display: grid;
+        gap: 0.75rem;
+        align-content: start;
+      }
+
+      .brx-scene-stat {
+        display: grid;
+        gap: 0.18rem;
+        padding: 0.78rem 0.82rem;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.88);
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, #e7d9c8);
+      }
+
+      .brx-scene-stat span {
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .brx-scene-stat strong {
+        font-size: 0.93rem;
+      }
+
+      .brx-connectors {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .brx-side-nav {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.7rem;
+      }
+
+      .brx-side-nav .brx-button {
+        min-width: 0;
+        width: 100%;
+        padding-inline: 0.8rem;
+      }
+
+      .brx-action-row {
+        margin-top: 0.95rem;
+      }
+
+      .brx-button {
+        position: relative;
+        isolation: isolate;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        min-width: 8.5rem;
+        min-height: 3.15rem;
+        padding: 0.95rem 1.35rem;
+        border-radius: 0.7rem;
+        border: none;
+        background: var(--accent);
+        box-shadow: 0 22px 36px -22px rgba(113, 76, 182, 0.66);
+        color: white;
+        font-weight: 600;
+        font-size: 0.98rem;
+        text-decoration: none;
+        transition:
+          transform 180ms ease,
+          box-shadow 180ms ease,
+          border-color 180ms ease,
+          background-color 180ms ease;
+      }
+
+      .brx-button:hover,
+      .brx-button:focus-visible {
+        transform: translateY(-1px);
+        background: var(--accent-strong);
+      }
+
+      .brx-button:active {
+        transform: translateY(0) scale(0.99);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.6),
+          0 10px 18px rgba(113, 76, 182, 0.2);
+      }
+
+      .brx-button:focus-visible {
+        outline: 2px solid color-mix(in srgb, white 56%, var(--accent) 44%);
+        outline-offset: 3px;
+      }
+
+      .brx-button--soft {
+        background: rgba(255, 255, 255, 0.82);
+        color: var(--ink);
+        border: 1px solid rgba(36, 16, 19, 0.14);
+        box-shadow: 0 18px 32px -24px rgba(36, 16, 19, 0.24);
+      }
+
+      .brx-button--soft:hover,
+      .brx-button--soft:focus-visible {
+        background: rgba(255, 255, 255, 0.94);
+        border-color: rgba(113, 76, 182, 0.3);
+      }
+
+      .brx-connector {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.9rem 1rem;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: white;
+      }
+
+      .brx-connector a {
+        min-width: 5.2rem;
+        padding: 0.72rem 1rem;
+        font-size: 0.96rem;
+      }
+
+      .brx-side {
+        padding: 1.15rem 1rem 1rem;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 0.85rem;
+      }
+
+      .brx-side-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 2.6rem;
+      }
+
+      .brx-rail {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .brx-rail-card {
+        padding: 1rem;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.92);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .brx-start-card {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.9)),
+          radial-gradient(circle at top right, rgba(113, 76, 182, 0.08), transparent 36%);
+      }
+
+      .brx-start-intro {
+        margin: 0 0 0.6rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .brx-start-grid {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 0.85rem;
+      }
+
+      .brx-start-step {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.8rem;
+        align-items: start;
+        padding: 0.85rem 0.9rem;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.84);
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #e8e0ff);
+      }
+
+      .brx-step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.9rem;
+        height: 1.9rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--accent) 86%, white);
+        color: white;
+        font-weight: 700;
+        box-shadow: 0 16px 24px -18px rgba(113, 76, 182, 0.55);
+      }
+
+      .brx-step-copy {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .brx-step-copy strong {
+        display: block;
+        margin-bottom: 0.18rem;
+        color: var(--ink);
+      }
+
+      .brx-step-copy code {
+        color: var(--ink);
+      }
+
+      .brx-start-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin-top: 1rem;
+      }
+
+      .brx-dot {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+
+      .brx-dot[data-state="green"] {
+        background: #22c55e;
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.18);
+      }
+
+      .brx-dot[data-state="yellow"] {
+        background: #f59e0b;
+        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.18);
+      }
+
+      .brx-dot[data-state="red"] {
+        background: #ef4444;
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18);
+      }
+
+      .brx-dot[data-state="checking"] {
+        background: #94a3b8;
+        box-shadow: 0 0 0 6px rgba(148, 163, 184, 0.18);
+      }
+
+      .brx-pulse {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.7rem;
+        color: var(--muted);
+      }
+
+      .brx-health-card {
+        display: grid;
+        gap: 1rem;
+        background:
+          radial-gradient(circle at top right, rgba(113, 76, 182, 0.08), transparent 34%),
+          rgba(255,255,255,0.94);
+      }
+
+      .brx-health-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: start;
+      }
+
+      .brx-health-summary {
+        margin: 0.35rem 0 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .brx-health-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.4rem 0.68rem;
+        margin-bottom: 0.55rem;
+        border-radius: 999px;
+        background: rgba(232, 224, 255, 0.84);
+        border: 1px solid rgba(113, 76, 182, 0.14);
+        color: var(--accent-strong);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .brx-health-light {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 999px;
+        background: #94a3b8;
+        box-shadow: 0 0 0 8px rgba(148, 163, 184, 0.16);
+        flex: 0 0 auto;
+      }
+
+      .brx-health-light[data-state="green"] {
+        background: #22c55e;
+        box-shadow: 0 0 0 7px rgba(34, 197, 94, 0.18);
+      }
+
+      .brx-health-light[data-state="yellow"] {
+        background: #f59e0b;
+        box-shadow: 0 0 0 7px rgba(245, 158, 11, 0.2);
+      }
+
+      .brx-health-light[data-state="red"] {
+        background: #ef4444;
+        box-shadow: 0 0 0 7px rgba(239, 68, 68, 0.2);
+      }
+
+      .brx-health-light[data-state="checking"] {
+        animation: brxHealthBlink 1.2s ease-in-out infinite;
+      }
+
+      .brx-health-meter {
+        position: relative;
+        min-height: 4.9rem;
+        padding: 0.9rem;
+        border-radius: 16px;
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #e8e0ff);
+        background:
+          radial-gradient(circle at 18% 22%, rgba(255,255,255,0.94), transparent 36%),
+          linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.9));
+        overflow: hidden;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        color: #22c55e;
+      }
+
+      .brx-health-meter::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(113, 76, 182, 0.04), transparent 68%),
+          radial-gradient(circle at 82% 20%, rgba(113, 76, 182, 0.08), transparent 24%);
+        pointer-events: none;
+      }
+
+      .brx-health-bar-wrap {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .brx-health-bar-labels {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.8rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .brx-health-track {
+        position: relative;
+        height: 1rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0.35)),
+          rgba(113, 76, 182, 0.08);
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, rgba(108, 98, 87, 0.12));
+        box-shadow: inset 0 1px 2px rgba(36, 16, 19, 0.08);
+      }
+
+      .brx-health-fill {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 74%;
+        border-radius: inherit;
+        background:
+          linear-gradient(90deg, color-mix(in srgb, currentColor 92%, white), currentColor),
+          currentColor;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.28),
+          0 0 18px color-mix(in srgb, currentColor 26%, transparent);
+        transition: width 220ms ease, background-color 180ms ease, box-shadow 180ms ease;
+      }
+
+      .brx-health-fill::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+          90deg,
+          rgba(255,255,255,0.06) 0,
+          rgba(255,255,255,0.06) 10px,
+          rgba(255,255,255,0.18) 10px,
+          rgba(255,255,255,0.18) 18px
+        );
+        mix-blend-mode: screen;
+      }
+
+      .brx-health-meter[data-state="yellow"] {
+        color: #f59e0b;
+      }
+
+      .brx-health-meter[data-state="red"] {
+        color: #ef4444;
+      }
+
+      .brx-health-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .brx-health-stat {
+        padding: 0.78rem 0.84rem;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.84);
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, #e8e0ff);
+      }
+
+      .brx-health-stat span {
+        display: block;
+        margin-bottom: 0.2rem;
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .brx-health-stat strong {
+        display: block;
+        font-size: 0.98rem;
+      }
+
+      .brx-health-reasons {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        color: var(--muted);
+        display: grid;
+        gap: 0.4rem;
+      }
+
+      .brx-health-reasons li {
+        line-height: 1.45;
+        padding: 0.68rem 0.78rem;
+        border-radius: 12px;
+        background: rgba(255,255,255,0.76);
+        border: 1px solid color-mix(in srgb, var(--accent) 12%, #ece7f8);
+      }
+
+      .brx-access-card {
+        display: grid;
+        gap: 0.8rem;
+      }
+
+      .brx-access-list {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .brx-access-item {
+        display: grid;
+        gap: 0.2rem;
+        padding: 0.8rem 0.9rem;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.82);
+        border: 1px solid color-mix(in srgb, var(--accent) 10%, #e8e0ff);
+      }
+
+      .brx-access-item span {
+        font-size: 0.78rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .brx-access-item strong,
+      .brx-access-item code {
+        font-size: 0.95rem;
+        color: var(--ink);
+        word-break: break-all;
+      }
+
+      .brx-access-note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      @keyframes brxFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-2px); }
+      }
+
+      @keyframes brxFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes brxDrift {
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(0, -6px, 0); }
+      }
+
+      @keyframes brxGlowPulse {
+        0%, 100% { opacity: 0.45; transform: scale(1); }
+        50% { opacity: 0.68; transform: scale(1.05); }
+      }
+
+      @keyframes brxHealthBlink {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 1; }
+      }
+
+      .brx-topline,
+      .brx-wordmark,
+      .brx-copy,
+      .brx-action-row,
+      .brx-chip-row,
+      .brx-status-row,
+      .brx-facts,
+      .brx-scene,
+      .brx-card,
+      .brx-side-header,
+      .brx-connector,
+      .brx-rail-card {
+        opacity: 0;
+        animation: brxFadeUp 720ms cubic-bezier(.2,.8,.2,1) forwards;
+      }
+
+      .brx-wordmark { animation-delay: 80ms; }
+      .brx-copy { animation-delay: 150ms; }
+      .brx-action-row { animation-delay: 220ms; }
+      .brx-chip-row { animation-delay: 280ms; }
+      .brx-status-row { animation-delay: 340ms; }
+      .brx-facts { animation-delay: 380ms; }
+      .brx-scene { animation-delay: 440ms; }
+      .brx-card:nth-of-type(1) { animation-delay: 520ms; }
+      .brx-card:nth-of-type(2) { animation-delay: 580ms; }
+      .brx-card:nth-of-type(3) { animation-delay: 640ms; }
+      .brx-side-header { animation-delay: 200ms; }
+      .brx-connector:nth-of-type(1) { animation-delay: 300ms; }
+      .brx-connector:nth-of-type(2) { animation-delay: 380ms; }
+      .brx-connector:nth-of-type(3) { animation-delay: 460ms; }
+      .brx-rail-card:nth-of-type(1) { animation-delay: 540ms; }
+      .brx-rail-card:nth-of-type(2) { animation-delay: 620ms; }
+
+      .brx-action-row .brx-button:first-child {
+        animation: brxFloat 4.6s ease-in-out infinite;
+      }
+
+      .brx-scene-glow {
+        animation: brxGlowPulse 5.4s ease-in-out infinite;
+      }
+
+      .brx-mini-card:nth-child(1) { animation: brxDrift 5.2s ease-in-out infinite; }
+      .brx-mini-card:nth-child(2) { animation: brxDrift 6.1s ease-in-out infinite 180ms; }
+      .brx-mini-card:nth-child(3) { animation: brxDrift 5.8s ease-in-out infinite 320ms; }
+
+      .brx-card--spotlight {
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 12%, white), transparent 36%),
+          rgba(255, 255, 255, 0.94);
+      }
+
+      @media (max-width: 980px) {
+        .brx-splash {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-scene-stack {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-facts {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .brx-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-health-stats {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-side-nav {
+          grid-template-columns: 1fr;
+        }
+
+        .brx-topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Brackets package entry point.
+
+      This root index.html is the starter shell the built-in host serves first.
+      Keep it as the package entry point, then move real app work into app/.
+      Use config/brackets.yaml to control where the entry hands off next:
+      - entry.route chooses the Brackets route to open
+      - entry.autoStart decides whether the app opens that route immediately or keeps this starter first
+
+      Use this transition path:
+      1. Keep page wiring in app/views/*.view
+      2. Keep UI templates in app/pages/*.html and app/layouts/*.html
+      3. Keep page behavior in app/logic/*.logic
+      4. Keep model rules, queries, and persistence in app/data/*.data
+      5. Keep backend transport in app/api/*.api
+
+      framework/demo/ is only the starter surface and shared starter branding.
+      The real Brackets app should grow from app/, not by rewriting the demo folder.
+
+      Docs:
+      - https://josh-robbins.github.io/brackets/start.html
+      - https://josh-robbins.github.io/brackets/guide.html
+      - https://josh-robbins.github.io/brackets/reference.html
+    -->
+    <div id="brackets-root" data-brx-package-entry="true">
+      <!-- Starter splash: prove the framework is running, teach the file model, and point developers into the docs quickly. -->
+      <!-- Docs: https://josh-robbins.github.io/brackets/start.html and https://josh-robbins.github.io/brackets/guide.html -->
+      <main class="brx-splash">
+        <section class="brx-hero">
+          <div class="brx-topbar">
+            <a class="brx-brand" href="/" aria-label="{{NAME}} home">
+              <span class="brx-brand-mark" aria-hidden="true">
+                <img src="{{FAVICON_PATH}}" alt="" />
+              </span>
+              <span class="brx-brand-copy">
+                <strong>{{NAME}}</strong>
+                <span>Full framework</span>
+              </span>
+            </a>
+            <nav class="brx-topnav" aria-label="Starter routes">
+              <a href="/home" data-brx-primary="true">Home</a>
+              <a href="/router">Router</a>
+              <a href="/contacts">Contacts</a>
+              <a href="https://josh-robbins.github.io/brackets/start.html" target="_blank" rel="noreferrer">Docs</a>
+            </nav>
+          </div>
+          <span class="brx-eyebrow">HTML framework that stays out of your way</span>
+          <div class="brx-wordmark-wrap">
+            <span class="brx-wordmark-note">No-build HTML framework</span>
+            <img class="brx-wordmark" src="{{LOGO_PATH}}" alt="{{NAME}} logo" />
+          </div>
+          <div class="brx-copy">
+            <h1>{{BRANDING_TITLE}}</h1>
+            <p><strong>Brackets</strong> lets you start with plain HTML, then add routes, data, and bigger backends only when you need them.</p>
+          </div>
+          <!-- Starter actions stay short on purpose so the first-run page gets out of the way fast. -->
+          <!-- Docs: https://josh-robbins.github.io/brackets/start.html -->
+          <div class="brx-action-row">
+            <a class="brx-button" href="https://josh-robbins.github.io/brackets/start.html" target="_blank" rel="noreferrer">Getting started</a>
+            <a class="brx-button brx-button--soft" href="/home">Open demo app</a>
+            <a class="brx-button brx-button--soft" href="https://josh-robbins.github.io/brackets/reference.html" target="_blank" rel="noreferrer">Reference</a>
+            <a class="brx-button brx-button--soft" href="https://josh-robbins.github.io/brackets/agents.html" target="_blank" rel="noreferrer">AI guide</a>
+            <a class="brx-button brx-button--soft" href="/config/brackets.yaml" target="_blank" rel="noreferrer">Config</a>
+          </div>
+          <div class="brx-chip-row" style="margin-top: 1.4rem;">
+            {{CHIPS_HTML}}
+          </div>
+          <!-- Show a believable Brackets app surface here: routes, local model code, and backend growth without turning the starter into a fake product demo. -->
+          <!-- Docs: https://josh-robbins.github.io/brackets/guide.html and https://josh-robbins.github.io/brackets/platform.html -->
+          <section class="brx-scene" aria-label="Brackets starter workspace preview">
+            <div class="brx-scene-grid"></div>
+            <div class="brx-scene-glow brx-scene-glow--one"></div>
+            <div class="brx-scene-glow brx-scene-glow--two"></div>
+            <div class="brx-scene-stack">
+              <div class="brx-scene-board">
+                <div class="brx-scene-toolbar">
+                  <div class="brx-toolbar-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <span class="brx-toolbar-pill">starter app</span>
+                </div>
+                <div class="brx-mini-grid">
+                  <article class="brx-mini-card">
+                    <strong>Home</strong>
+                    <p>Open the main routed app surface and start from a page that already uses Brackets layout, logic, data, and API helpers together.</p>
+                  </article>
+                  <article class="brx-mini-card">
+                    <strong>Router</strong>
+                    <p>See route ids, href helpers, and shell preservation on a page built specifically to show the router off.</p>
+                  </article>
+                  <article class="brx-mini-card brx-mini-card--wide">
+                    <strong>Contacts</strong>
+                    <p>Use the flat-file data demo to see `.data` own persistence while `.logic` stays small and templates stay in HTML.</p>
+                  </article>
+                </div>
+              </div>
+              <aside class="brx-scene-panel" aria-hidden="true">
+                <div class="brx-toolbar-pill">starter routes</div>
+                <div class="brx-scene-stat">
+                  <span>Route</span>
+                  <strong>/home</strong>
+                </div>
+                <div class="brx-scene-stat">
+                  <span>Router</span>
+                  <strong>/router</strong>
+                </div>
+                <div class="brx-scene-stat">
+                  <span>Data</span>
+                  <strong>/contacts</strong>
+                </div>
+                <div class="brx-scene-stat">
+                  <span>Host</span>
+                  <strong>Same-origin</strong>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </section>
+        <aside class="brx-side">
+          <div class="brx-side-header">
+            <strong>Starter status</strong>
+            <span class="brx-pulse"><span class="brx-dot" data-brx-shell-light></span><span data-brx-shell-text>checking</span></span>
+          </div>
+          <!-- Prove the built-in host and runtime path before the developer writes any real app code. -->
+          <!-- Docs: https://josh-robbins.github.io/brackets/reference.html and https://josh-robbins.github.io/brackets/start.html -->
+          <article class="brx-rail-card brx-health-card" data-brx-health-card>
+            <div class="brx-health-head">
+              <div>
+                <span class="brx-health-tag">Status</span>
+                <h3 style="margin: 0;">Runtime health</h3>
+                <p class="brx-health-summary" data-brx-health-summary>Measuring the app now.</p>
+              </div>
+              <span class="brx-health-light" data-brx-health-light data-state="checking" aria-hidden="true"></span>
+            </div>
+            <div class="brx-health-meter" data-brx-health-meter data-state="checking" aria-hidden="true">
+              <div class="brx-health-bar-wrap">
+                <div class="brx-health-bar-labels">
+                  <span>Slower</span>
+                  <span>Faster</span>
+                </div>
+                <div class="brx-health-track">
+                  <span class="brx-health-fill" data-brx-health-fill></span>
+                </div>
+              </div>
+            </div>
+            <div class="brx-health-stats">
+              <div class="brx-health-stat">
+                <span>Response</span>
+                <strong data-brx-health-latency>checking</strong>
+              </div>
+              <div class="brx-health-stat">
+                <span>Engine</span>
+                <strong data-brx-health-runtime>starting</strong>
+              </div>
+              <div class="brx-health-stat">
+                <span>Mode</span>
+                <strong data-brx-health-mode>checking</strong>
+              </div>
+            </div>
+            <ul class="brx-health-reasons" data-brx-health-reasons>
+              <li>Waiting for the first response.</li>
+            </ul>
+          </article>
+          <article class="brx-rail-card brx-access-card">
+            <div class="brx-health-head">
+              <div>
+                <h3 style="margin: 0;">Access</h3>
+                <p class="brx-access-note">Change <strong>host</strong>, <strong>port</strong>, and <strong>tls</strong> in <strong>config/brackets.yaml</strong> when you want LAN access or HTTPS.</p>
+              </div>
+            </div>
+            <div class="brx-access-list">
+              <div class="brx-access-item">
+                <span>Local</span>
+                <strong data-brx-local-origin>{{ORIGIN}}</strong>
+              </div>
+              <div class="brx-access-item">
+                <span>Network</span>
+                <strong data-brx-network-origin>Not exposed yet</strong>
+              </div>
+            </div>
+          </article>
+          <div class="brx-rail">
+            <article class="brx-rail-card brx-start-card">
+              <h3 style="margin: 0 0 0.35rem;">Start here</h3>
+              <p class="brx-start-intro">Start in <code>app/</code>, then keep each file doing one clear job.</p>
+              <div class="brx-start-grid">
+                <div class="brx-start-step">
+                  <span class="brx-step-number">1</span>
+                  <div class="brx-step-copy">
+                    <strong>Build pages with <code>.view</code> and <code>.html</code></strong>
+                    Use <code>.view</code> to wire routes and page settings together, then keep the visible UI in clean <code>.html</code> templates.
+                  </div>
+                </div>
+                <div class="brx-start-step">
+                  <span class="brx-step-number">2</span>
+                  <div class="brx-step-copy">
+                    <strong>Split behavior from data</strong>
+                    Put actions and page behavior in <code>.logic</code>. Put model rules, transforms, and persistence in <code>.data</code>.
+                  </div>
+                </div>
+              </div>
+              <div class="brx-start-actions">
+                <a class="brx-button brx-button--soft" href="/home">Open demo app</a>
+              </div>
+            </article>
+          </div>
+        </aside>
+      </main>
+    </div>
+  </body>
+</html>

@@ -26,8 +26,8 @@ If you want the smoothest path in:
 
 1. [Getting started](../docs.md)
 2. [Guide](./guide.md)
-3. Run `node src/cli.js check demo/app`
-4. Run `node src/cli.js doctor demo/app --strict`
+3. Run `config show` and `info`
+4. Run `health` and `test app`
 5. [Reference](./reference.md)
 
 ## Learn The Model
