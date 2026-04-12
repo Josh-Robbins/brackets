@@ -1,0 +1,80 @@
+<!-- framework/demo/app/home/home.html
+     Interacts with: app/home/home.view, app/components/scenepanel.html, livedata.html, siderail.html, healthcard.html, app/styles.css
+-->
+<div class="brx-splash">
+  <div class="brx-hero">
+    <div class="brx-topbar">
+      <a class="brx-brand" href="/" aria-label="Brackets — home">
+        <span class="brx-brand-mark"><img src="/app/logo-mark.svg" alt="" width="64" height="64" decoding="async" /></span>
+        <span class="brx-brand-copy">
+          <strong>Brackets</strong>
+          <span>Framework</span>
+        </span>
+      </a>
+      <nav class="brx-site-nav">
+        <a href="/docs/guide.html">Guide</a>
+        <a href="/docs/reference.html">Reference</a>
+        <a href="#brx-live">Live data</a>
+        <a href="/docs/start.html" data-brx-primary="true">Get started</a>
+      </nav>
+    </div>
+
+    <div class="brx-eyebrow">v0.95.0 &middot; Embedded host</div>
+
+    <div class="brx-wordmark-wrap">
+      <h1 class="brx-wordmark"><img src="/app/logo.svg" alt="Brackets" style="width:100%;height:auto;" /></h1>
+    </div>
+
+    <div class="brx-copy">
+      <h1>Give HTML superpowers.</h1>
+      <p><strong>No build step. HTML first. Datastar underneath.</strong> Build fast and ship the same app from a desktop folder to production.</p>
+    </div>
+
+    <div class="brx-action-row">
+      <a class="brx-button" href="/docs/start.html">Get started</a>
+      <a class="brx-button brx-button--soft" href="/docs/guide.html">Read the guide</a>
+    </div>
+
+    <div class="brx-chip-row">
+      <span class="brx-chip">No build step</span>
+      <span class="brx-chip">Datastar engine</span>
+      <span class="brx-chip">Built-in Deno host</span>
+    </div>
+
+    <div class="brx-facts">
+      <div class="brx-fact">
+        <strong>HTML first</strong>
+        <p>Write pages in plain HTML. No JSX, no templates, no compile.</p>
+      </div>
+      <div class="brx-fact">
+        <strong>Datastar</strong>
+        <p>Reactive signals and SSE built into the runtime.</p>
+      </div>
+      <div class="brx-fact">
+        <strong>File router</strong>
+        <p>Drop a <code>.view</code> file and routes appear automatically.</p>
+      </div>
+      <div class="brx-fact">
+        <strong>Portable</strong>
+        <p>Same folder runs on your desktop and in production.</p>
+      </div>
+    </div>
+
+    <div class="brx-hero-dock" id="brx-live" :state="{ tab: 'scene' }">
+      <div class="brx-tablist" role="tablist" aria-label="Hero panels">
+        <button type="button" class="brx-tab" :set.aria-pressed="tab === 'scene'" @click="mutate('tab', 'scene')">Scene</button>
+        <button type="button" class="brx-tab" :set.aria-pressed="tab === 'live'" @click="mutate('tab', 'live')">Live data</button>
+      </div>
+
+      <div class="brx-tab-panel brx-tab-panel--scene" :show="tab === 'scene'">
+        <div :use="'@app/components/scenepanel.html'"></div>
+      </div>
+
+      <div class="brx-tab-panel" :show="tab === 'live'">
+        <div :use="'@app/components/livedata.html'"></div>
+      </div>
+    </div>
+  </div>
+
+  <div :use="'@app/components/siderail.html'"></div>
+</div>

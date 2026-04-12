@@ -1,0 +1,16 @@
+/* framework/demo/app/home/home.view
+ * Interacts with: app/home/home.html, app/components/*.html (:use), app/data/demo.data, framework/server.js (evaluatePageManifest)
+ */
+
+page({
+  id: 'home',
+  route: '/',
+  title: 'Brackets',
+  meta: {
+    description: 'Brackets framework demo — HTML first, Datastar underneath.'
+  },
+  html: '@app/home/home.html',
+  data: {
+    demo: '@data/demo.data'
+  }
+})
