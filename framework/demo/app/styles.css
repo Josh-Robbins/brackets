@@ -442,6 +442,11 @@ body::after {
   border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
+.brx-sse-label {
+  min-width: 3.25rem;
+  line-height: 1.2;
+}
+
 .brx-sse-pulse {
   width: 0.55rem;
   height: 0.55rem;

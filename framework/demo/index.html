@@ -102,7 +102,7 @@
       <div
         class="brx-hero"
         :state="{ tab: 'scene', line: '', demoLog: null, liveSseOk: true, editingId: null, editDraft: '', noteSaveFeedback: 'idle' }"
-        :run="void read('/__brackets/live?kind=data&module=demo&method=events&route=/&intervalMs=2500', { as: 'state', path: 'demoLog', onOpen: () => mutate('liveSseOk', true), onMessage: () => mutate('liveSseOk', true), onError: () => mutate('liveSseOk', false) }).catch(() => mutate('liveSseOk', false))">
+        :run="read('/__brackets/live?kind=data&module=demo&method=events&route=/&intervalMs=2500', { as: 'state', path: 'demoLog', onOpen: () => mutate('liveSseOk', true), onMessage: () => mutate('liveSseOk', true), onError: () => mutate('liveSseOk', false) }).catch(() => mutate('liveSseOk', false))">
         <div class="brx-topbar">
           <a class="brx-brand" href="/" aria-label="Brackets — home">
             <span class="brx-brand-mark"><img src="/app/logo-mark.svg" alt="" width="64" height="64" decoding="async" /></span>
@@ -221,7 +221,8 @@
                 <div class="brx-live-status" aria-live="polite" aria-atomic="true">
                   <p class="brx-sse-badge" :class.brx-sse-badge--live="liveSseOk" :class.brx-sse-badge--delayed="!liveSseOk">
                     <span class="brx-sse-pulse" :class.brx-sse-pulse--delayed="!liveSseOk" aria-hidden="true"></span>
-                    <span :text="liveSseOk ? 'Live' : 'Delayed'"></span>
+                    <span class="brx-sse-label" :show="liveSseOk">Live</span>
+                    <span class="brx-sse-label" :show="!liveSseOk">Delayed</span>
                   </p>
                 </div>
               </div>
@@ -230,12 +231,18 @@
                 <label class="brx-live-field" for="brx-live-note">
                   <span class="brx-live-label-row">
                     <span class="brx-live-label-title">Note</span>
-                    <span class="brx-live-save-feedback brx-live-save-feedback--ok" :show="noteSaveFeedback === 'saved'" role="status">Saved.</span>
-                    <span class="brx-live-save-feedback brx-live-save-feedback--bad" :show="noteSaveFeedback === 'failed'" role="alert">Not Saved.</span>
+                    <span
+                      class="brx-live-save-feedback"
+                      :class.brx-live-save-feedback--ok="noteSaveFeedback === 'saved'"
+                      :class.brx-live-save-feedback--bad="noteSaveFeedback === 'failed'"
+                      :show="noteSaveFeedback === 'saved' || noteSaveFeedback === 'failed'"
+                      :text="noteSaveFeedback === 'saved' ? 'Saved.' : (noteSaveFeedback === 'failed' ? 'Not Saved.' : '')"
+                      role="status"
+                    ></span>
                   </span>
                   <input id="brx-live-note" name="brx-live-note" type="text" :bind="line" placeholder="Type a note" autocomplete="off" />
                 </label>
-                <button type="button" class="brx-button brx-button--soft" @click="void window.BracketsRuntime.callRpc('data', 'demo', 'append', [{ text: line }]).then((result) => { if (result && result.ok === true && result.row && result.row.id) { mutate('line', ''); mutate('noteSaveFeedback', 'saved'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 2800); } else { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); } }).catch(() => { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); })">Save</button>
+                <button type="button" class="brx-button brx-button--soft" @click="window.BracketsRuntime.callRpc('data', 'demo', 'append', [{ text: line }]).then((result) => { if (result && result.ok === true && result.row && result.row.id) { mutate('line', ''); mutate('noteSaveFeedback', 'saved'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 2800); } else { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); } }).catch(() => { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); })">Save</button>
               </div>
               <div class="brx-live-table-wrap">
                 <p class="brx-live-empty" :show="!demoLog || !demoLog.events || !demoLog.events.length">No notes yet. Add a note above and choose Save.</p>
@@ -261,7 +268,7 @@
                         <td class="brx-live-actions">
                           <button type="button" class="brx-button brx-button--soft brx-live-action-btn" :show="editingId !== row.id" @click="mutate('editDraft', row.text); mutate('editingId', row.id)">Edit</button>
                           <span class="brx-live-edit-actions" :show="editingId === row.id">
-                            <button type="button" class="brx-button brx-button--soft brx-live-action-btn" @click="void window.BracketsRuntime.callRpc('data', 'demo', 'update', [{ id: editingId, text: editDraft }]).then((result) => { if (result && result.ok === true && result.row && result.row.id) { mutate('editingId', null); mutate('editDraft', ''); mutate('noteSaveFeedback', 'saved'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 2800); } else { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); } }).catch(() => { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); })">Save</button>
+                            <button type="button" class="brx-button brx-button--soft brx-live-action-btn" @click="window.BracketsRuntime.callRpc('data', 'demo', 'update', [{ id: editingId, text: editDraft }]).then((result) => { if (result && result.ok === true && result.row && result.row.id) { mutate('editingId', null); mutate('editDraft', ''); mutate('noteSaveFeedback', 'saved'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 2800); } else { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); } }).catch(() => { mutate('noteSaveFeedback', 'failed'); window.setTimeout(() => mutate('noteSaveFeedback', 'idle'), 3200); })">Save</button>
                             <button type="button" class="brx-button brx-button--soft brx-live-action-btn" @click="mutate('editingId', null); mutate('editDraft', '')">Cancel</button>
                           </span>
                         </td>
