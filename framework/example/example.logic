@@ -1,0 +1,56 @@
+/* framework/example/example.logic
+ * Interacts with: ../../docs/guide.md#framework-example-package, example.view, page.html, app/data/example.data
+ *
+ * WHAT THIS IS
+ *   Page behavior: orchestration, lifecycle, UI actions. Model rules in `.data`, remote calls in `.api`.
+ *   App still boots from root `index.html`; this file lives under `app/` only.
+ *
+ * HOW TO USE (after copy)
+ *   1. Place at `app/example.logic` (or `app/logic/...` and fix `logic:` in the `.view`).
+ *   2. `mount` / named actions; `data.example` matches the `.view` manifest.
+ *   3. Browser + Datastar; Deno host by default (config.yaml). Lifecycle: see
+ *      https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#lifecycle-and-action-contract
+ */
+
+({
+  async mount({ data, state, cleanup }) {
+    let message = ''
+    try {
+      const row = await data.example.read()
+      message = row?.message != null ? String(row.message) : ''
+    } catch {
+      message = ''
+    }
+    state.set({
+      title: 'Example',
+      message
+    })
+
+    cleanup(() => {
+      // Teardown when this page unmounts (timers, listeners, subscriptions, etc.).
+    })
+  },
+
+  toggleOpen({ state }) {
+    const s = state.get()
+    state.set({ open: !s.open })
+  },
+
+  async saveNote({ data, state }) {
+    state.set({ saving: true, error: '' })
+    try {
+      const s = state.get()
+      const saved = await data.example.save({ message: s.form.note })
+      state.set({
+        message: saved.message,
+        saving: false,
+        error: ''
+      })
+    } catch (error) {
+      state.set({
+        saving: false,
+        error: error.message ?? 'Save failed.'
+      })
+    }
+  }
+})

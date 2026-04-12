@@ -1,0 +1,38 @@
+---
+description: Universal MCP policy — all agents use every server when task-appropriate (all feeds/prompts)
+alwaysApply: true
+---
+
+# MCP usage — universal policy
+
+This rule applies to **every** AI path in Cursor: Agent, Chat, Composer, inline edits, Cmd-K, background tasks, and any **feed** or sub-agent that can call tools. **Do not skip MCP** when a listed server matches the work—prefer tools over memory, guessing, or ad hoc shell/web unless an MCP truly cannot help.
+
+Before answering or editing, do a **quick mental scan**: which rows in the inventory below apply? Invoke those tools first (or in parallel) when relevant.
+
+## Inventory (use when the trigger matches)
+
+| Server | When to use it | Typical tools |
+|--------|----------------|---------------|
+| **user-thinking** | Every non-trivial turn: frame goal, constraints, plan, risks | `sequentialthinking` |
+| **user-repo** | Exploring or searching large trees, batch reads, path discovery | `directory_tree`, `search_files`, `read_multiple_files`, … |
+| **user-security** | Anything touching auth, validation, crypto, sessions, headers, injection, supply chain, hardening | `search_cheat_sheets`, `get_cheat_sheet`, … |
+| **plugin-context7-plugin-context** | Library/framework APIs, versions, official patterns | `resolve-library-id`, `query-docs` |
+| **plugin-tavily-web** | Web-only facts Context7 lacks: news, posts, changelogs, niche docs | `tavily_search`, `tavily_extract`, … |
+| **user-mdn** | HTML/CSS/JS/DOM/web platform semantics | `search`, `get-doc`, `get-compat` |
+| **user-compatibility** | Browser support matrices, BCD-style checks, baselines | `compat_search`, `compat_check`, `compat_list_browsers`, … |
+| **user-design** | Design tokens, a11y, component UX, design-system patterns | `search_design_knowledge`, `get_all_tags`, … |
+| **user-devtools** | Live Chrome: console, network, performance, DOM when debugging real pages | `list_pages`, `list_console_messages`, `navigate_page`, … |
+| **cursor-ide-browser** | Cursor’s browser automation: snapshots, clicks, screenshots for UI verification | `browser_snapshot`, `browser_tabs`, … |
+
+## Ordering and overlap
+
+- **Thinking** first on substantive work; add more thoughts if the task shifts.
+- **Security + Context7** together when both OWASP-style risk *and* official API usage matter.
+- **MDN** before inventing web API behavior; **user-compatibility** when “supported where?” matters; **design** when the question is design-system UX, not framework docs.
+- **Tavily** when the answer must come from the open web or is missing from Context7/MDN.
+- **Repo** whenever filesystem scope or search beats opening files one-by-one.
+- **Devtools** vs **cursor-ide-browser**: use DevTools MCP for deep Chrome debugging; use IDE browser tools when driving Cursor’s built-in browser flow.
+
+## Failures
+
+If a server errors or is disabled, say so in one line and fall back honestly—do not claim you used a tool you did not.

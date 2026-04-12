@@ -1,0 +1,32 @@
+<!-- framework/example/layout.html
+     Interacts with: ../../docs/guide.md#framework-example-package, page.html, example.view
+
+     WHAT THIS IS
+       Layout shell with :mount / :area. Copy to app/. Entry shell is root index.html, not this file.
+
+     HOW TO USE (after copy)
+       1. app/layout.html (or app/layouts/... and fix `layout:` in .view).
+       2. One :mount; optional :area + page :fill. Runtime rendering:
+          https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#runtime-rendering
+
+     Uses: [name], :state, :show, :text, :area, :mount, :set.*
+-->
+
+<div [example-layout] :state="{ showFooter: true }">
+  <header :area="'header'" aria-label="Layout header">
+    <!-- Page supplies header markup with :fill="'header'" in page.html -->
+  </header>
+
+  <!-- :mount receives page.html; use div here so page.html can use one <main> -->
+  <div :mount></div>
+
+  <footer [example-footer] :show="showFooter" aria-label="Layout footer">
+    <p :text="'Brackets — layout :state / :show / :text'"></p>
+    <a
+      href="https://josh-robbins.github.io/brackets/reference.html"
+      :set.target="'_blank'"
+      :set.rel="'noreferrer noopener'">
+      Brackets reference (opens in new tab)
+    </a>
+  </footer>
+</div>

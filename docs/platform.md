@@ -211,4 +211,4 @@ The next layers to deepen after the current pass are:
 
 For containerized local and production deployment patterns, read:
 
-- [docker.md](C:\Users\joshr\Documents\dev\Brackets\docs\docker.md)
+- [docker.md](./docker.md)

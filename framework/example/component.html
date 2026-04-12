@@ -1,0 +1,19 @@
+<!-- framework/example/component.html
+     Interacts with: ../../docs/guide.md#framework-example-package, page.html (:use)
+
+     WHAT THIS IS
+       Fragment loaded by :use — same `.html` type as page/layout; copy to app/component.html.
+
+     HOW TO USE (after copy)
+       1. Base file name must match :use (e.g. 'component'). :props → props.* in markup.
+       2. :text vs :html — Security notes:
+          https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#security-notes
+
+     Uses: [name], :text, :show, :class.*
+-->
+
+<section [example-component] :class.highlight="props.highlight">
+  <h2 :text="props.label"></h2>
+  <p :show="props.showHint" :text="props.hint"></p>
+  <p>Prefer <code>:text</code> for dynamic text. Use <code>:html</code> only when the markup is trusted.</p>
+</section>

@@ -1,4 +1,3 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from '../framework/server.js';
@@ -92,8 +91,8 @@ async function withServer(appRoot, run) {
 }
 
 async function writeText(filePath, source) {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, source, 'utf8');
+  await Deno.mkdir(path.dirname(filePath), { recursive: true });
+  await Deno.writeTextFile(filePath, source);
 }
 
 Deno.test('framework syntax compiler maps the documented Brackets language to Datastar and runtime targets', () => {
@@ -129,7 +128,7 @@ Deno.test('framework syntax compiler maps the documented Brackets language to Da
   assert(output.includes('class="card"'), '[name] should compile to a normal class attribute');
   assert(output.includes('id="hero"'), '#name should compile to a normal id attribute');
   assert(output.includes('data-signals="{ count: 1 }"'), ':state should compile to Datastar signals');
-  assert(output.includes('data-computed="{ doubled: $count * 2, feed: window.BracketsRuntime.read(\'/events.state\') }"'), ':calc should compile helper calls through the Brackets runtime');
+  assert(output.includes('data-computed="{ doubled: () => ($count * 2), feed: () => (window.BracketsRuntime.read(\'/events.state\')) }"'), ':calc should compile each value as a callable per Datastar computed object format');
   assert(output.includes('data-init="$count = $count + 1"'), ':run should compile mutate() to a Datastar-native write');
   assert(output.includes('data-effect="$count = $count + 2"'), ':watch should compile simple mutate() effects through Datastar-native writes');
   assert(output.includes('data-text="$count"'), ':text should compile to Datastar text binding');
@@ -151,11 +150,11 @@ Deno.test('framework syntax compiler maps the documented Brackets language to Da
   assert(output.includes('data-on:focus="window.BracketsRuntime.scope(el).nav.to(\'/next\')"'), 'documented nav helper should work inside event expressions');
   assert(output.includes('data-on:blur="evt.target.value"'), 'documented event helper should map cleanly to Datastar event context');
   assert(output.includes('data-on:input="$count = $count + 1"'), 'plain mutate() actions should stay on the Datastar-native signal path');
-  assert(output.includes('data-b-html="htmlBlock"'), ':html should stay on the framework runtime path');
+  assert(output.includes('data-b-html="$htmlBlock"'), ':html should stay on the framework runtime path');
 });
 
 Deno.test('framework action helpers follow the documented control, form, and file behavior', async () => {
-  const runtimeSource = await readFile(path.join(repoRoot, 'framework', 'runtime.js'), 'utf8');
+  const runtimeSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'runtime.js'));
   const start = runtimeSource.indexOf('function resolveActionElement');
   const end = runtimeSource.indexOf('function currentRouteState');
   assert(start !== -1 && end !== -1 && end > start, 'runtime should keep the action helper block in a readable function section');
@@ -243,10 +242,16 @@ Deno.test('framework action helpers follow the documented control, form, and fil
 
 Deno.test('framework serves the root entry from config.yaml and exposes the docs-aligned contracts', async () => {
   await withServer(repoRoot, async ({ url, host }) => {
+    const expectedEntryFolder = 'framework/demo';
+    const expectedEntryPoint = '/framework/demo/index.html';
     const root = await fetch(url);
     const html = await root.text();
-    assertEqual(root.status, 200, 'root index.html should be served first');
+    assertEqual(root.status, 200, 'configured entry folder index.html should be served at /');
     assert(html.includes('<!doctype html>'), 'root response should be HTML');
+    assert(
+      html.includes('id="app-root"') && html.includes('framework/demo'),
+      'response should be the configured entry folder index (demo shell + import map)'
+    );
     assertEqual(root.headers.get('x-content-type-options'), 'nosniff', 'root response should disable content-type sniffing');
     assertEqual(root.headers.get('x-frame-options'), 'DENY', 'root response should block framing');
     assertEqual(root.headers.get('referrer-policy'), 'strict-origin-when-cross-origin', 'root response should send the expected referrer policy');
@@ -258,19 +263,19 @@ Deno.test('framework serves the root entry from config.yaml and exposes the docs
     assertEqual(configResponse.status, 200, 'root yaml config endpoint should be available');
     assert(configText.includes('entry:'), 'root yaml config should include the entry section');
     assertEqual(configJsonResponse.status, 200, 'json compatibility config endpoint should still be available');
-    assertEqual(configJson.entry.folder, '.', 'default entry folder should be the package root');
+    assertEqual(configJson.entry.folder, expectedEntryFolder, 'config.json should echo entry.folder from config.yaml');
 
     const yamlResponse = await fetch(`${url}/config/brackets.yaml`);
     const yaml = await yamlResponse.text();
     assertEqual(yamlResponse.status, 200, 'yaml config endpoint should be available');
     assert(yaml.includes('entry:'), 'yaml config should include the entry section');
-    assert(yaml.includes('folder: .'), 'yaml config should describe the entry folder');
+    assert(yaml.includes(`folder: ${expectedEntryFolder}`), 'yaml config should describe the configured package entry folder');
 
     const hostResponse = await fetch(`${url}/.well-known/brackets-host.json`);
     const hostContract = await hostResponse.json();
     assertEqual(hostResponse.status, 200, 'host contract should be available');
-    assertEqual(hostContract.distribution.entryFolder, '.', 'host contract should report the root entry folder');
-    assertEqual(host.distribution.entryPoint, '/index.html', 'server return value should report the root entry file');
+    assertEqual(hostContract.distribution.entryFolder, expectedEntryFolder, 'host contract should report the configured package entry folder');
+    assertEqual(host.distribution.entryPoint, expectedEntryPoint, 'server should report entry point derived from entry.folder');
     assertEqual(hostResponse.headers.get('cross-origin-opener-policy'), 'same-origin', 'host contract should include the opener policy');
     assertEqual(hostResponse.headers.get('cross-origin-resource-policy'), 'same-origin', 'host contract should include the resource policy');
 
@@ -288,7 +293,7 @@ Deno.test('framework serves the root entry from config.yaml and exposes the docs
     assert(runtimeSource.includes('SESSION_CACHE_TTL_MS = 5000'), 'runtime should bound cached session reuse with a short TTL');
     assert(runtimeSource.includes("credentials: 'same-origin'"), 'runtime transport should stay on same-origin credentials for host/session requests');
 
-      const serverSource = await readFile(path.join(repoRoot, 'framework', 'server.js'), 'utf8');
+      const serverSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'server.js'));
       assert(serverSource.includes('__Host-brackets_csrf'), 'server should support secure host-prefixed CSRF cookies on HTTPS hosts');
       assert(serverSource.includes('function routeAuthStatus'), 'server should compute auth status explicitly instead of inferring it ad hoc');
       assert(serverSource.includes('function methodLooksMutating'), 'server should distinguish reads from writes before invalidating route/cache state');
@@ -341,7 +346,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), await readFile(path.join(repoRoot, 'index.html'), 'utf8'));
+    await writeText(path.join(tempRoot, 'index.html'), await Deno.readTextFile(path.join(repoRoot, 'index.html')));
     await writeText(path.join(tempRoot, 'app', 'views', 'home.view'), [
       'page({',
       "  id: 'home',",
@@ -456,11 +461,11 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(renderPayload.html.includes('data-b-mount'), 'rendered layout should preserve the mount marker for partial route swaps');
       assert(renderPayload.mountHtml.includes('data-signals='), 'render payload should include the transformed mounted fragment');
       assert(renderPayload.html.includes('data-signals='), 'route HTML should be transformed into Datastar-compatible markup');
-      assert(renderPayload.html.includes('data-b-if="visible"'), ':if should remain on the framework runtime path');
-      assert(renderPayload.html.includes('data-b-html="htmlBlock"'), ':html should remain on the framework runtime path');
-      assert(renderPayload.html.includes('data-b-each="item, row in items"'), ':each should remain on the framework runtime path');
-      assert(renderPayload.html.includes('data-b-use="card"'), ':use should remain on the framework runtime path');
-      assert(renderPayload.html.includes('data-b-props="{ title: title }"'), ':props should remain on the framework runtime path');
+      assert(renderPayload.html.includes('data-b-if="$visible"'), ':if should remain on the framework runtime path');
+      assert(renderPayload.html.includes('data-b-html="$htmlBlock"'), ':html should remain on the framework runtime path');
+      assert(renderPayload.html.includes('data-b-each="item, row in $items"'), ':each should remain on the framework runtime path');
+      assert(renderPayload.html.includes(`data-b-use="'card'"`), ':use should remain on the framework runtime path');
+      assert(renderPayload.html.includes('data-b-props="{ title: $title }"'), ':props should remain on the framework runtime path');
       assert(renderPayload.html.includes('data-b-area="hero"'), ':area should remain on the framework runtime path');
       assert(renderPayload.html.includes('data-b-fill="hero"'), ':fill should remain on the framework runtime path');
       assert(renderPayload.html.includes('data-show="window.BracketsRuntime.requestState.loading(&quot;route&quot;)"'), ':loading should compile to Datastar-backed request-state visibility');
@@ -468,7 +473,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(renderPayload.html.includes('data-attr:title="window.BracketsRuntime.requestState.message(&quot;route&quot;) || \'\'"'), ':error should expose the request error message as a Datastar-backed attribute');
       assert(renderPayload.html.includes('data-on:click="@get(\'/api/posts\')"'), 'plain get() should compile to a Datastar-native action');
       assert(renderPayload.html.includes('data-on:click="$title = $title + \' now\'"'), 'plain mutate() should compile to a Datastar-native signal write');
-      assert(renderPayload.html.includes("data-computed=\"{ feed: window.BracketsRuntime.read('/events.state') }\""), 'plain read() expressions should compile to the Brackets live runtime helper');
+      assert(renderPayload.html.includes("data-computed=\"{ feed: () => (window.BracketsRuntime.read('/events.state')) }\""), 'plain read() expressions should compile to the Brackets live runtime helper');
 
       const sitemap = await fetch(`${url}/sitemap.xml`).then((response) => response.text());
       assert(sitemap.includes('<loc>http://127.0.0.1:'), 'sitemap should render absolute route URLs');
@@ -496,8 +501,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(runtimeSource.includes('auth: createAuthApi()'), 'runtime should expose auth helpers that match the docs');
       assert(runtimeSource.includes('get authenticated()'), 'runtime auth helpers should expose ctx.auth.authenticated for quick session checks');
       assert(runtimeSource.includes('download(target, filename)'), 'runtime nav helpers should expose download()');
-      assert(runtimeSource.includes('async function applyFrameworkDirectives'), 'runtime should apply framework-managed directives for the unsupported Datastar-native gap');
-      assert(runtimeSource.includes('FRAMEWORK_DIRECTIVE_MAX_PASSES = 8'), 'framework directives should continue until the nested composition tree settles');
+      assert(runtimeSource.includes('async function applyFrameworkDirectives'), 'runtime should apply framework directives (:if, :each, :use, :html, …)');
       assert(runtimeSource.includes('async function fetchFrameworkTemplate'), 'runtime should resolve framework templates through the built-in host');
       assert(runtimeSource.includes('__bUseRequestToken'), 'framework template composition should guard against stale async template resolutions');
       assert(runtimeSource.includes('templateStamp: templatePayload.stamp'), 'framework template composition should include the template stamp in its rerender signature');
@@ -517,15 +521,15 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(runtimeSource.includes('async optimistic(patch, task)'), 'runtime state helpers should expose optimistic updates');
       assert(runtimeSource.includes('runtimeValuesEqual'), 'optimistic state rollback should compare the live value before reverting over newer state');
       assert(runtimeSource.includes('requestToken = nextCacheToken()'), 'route and cache fetches should guard against older async work overwriting newer payloads');
-      assert(runtimeSource.includes('attributeFilter'), 'framework directive observer should react when framework-managed attributes change in place');
-      assert(runtimeSource.includes("scheduleFrameworkDirectives();\n      return value;"), 'state transport updates should reschedule framework directives after merging new values');
+      assert(runtimeSource.includes('renderFrameworkIf('), 'runtime should render data-b-if via framework passes');
+      assert(runtimeSource.includes('observeFrameworkDom('), 'runtime should observe DOM for framework directive attributes');
       assert(runtimeSource.includes('invalidate(key)'), 'runtime state helpers should expose cache invalidation');
-      assert(runtimeSource.includes('self: scope.self'), 'runtime expression evaluation should expose the documented self helper');
-      assert(runtimeSource.includes('parent: scope.parent'), 'runtime expression evaluation should expose the documented parent helper');
-      assert(runtimeSource.includes('children: scope.children'), 'runtime expression evaluation should expose the documented children helper');
-      assert(runtimeSource.includes('root: scope.root'), 'runtime expression evaluation should expose the documented root helper');
-      assert(runtimeSource.includes('props: scope.props'), 'runtime expression evaluation should expose the documented props helper');
-      assert(runtimeSource.includes('event: scope.event ?? null'), 'runtime expression evaluation should expose the documented event helper');
+      assert(runtimeSource.includes('self: locals'), 'scope bridge should expose the documented self helper');
+      assert(runtimeSource.includes('parent: null'), 'scope bridge should expose the documented parent helper');
+      assert(runtimeSource.includes('children: []'), 'scope bridge should expose the documented children helper');
+      assert(runtimeSource.includes('root: locals'), 'scope bridge should expose the documented root helper');
+      assert(runtimeSource.includes('props: {}'), 'scope bridge should expose the documented props helper');
+      assert(runtimeSource.includes('event: null'), 'scope bridge should expose the documented event helper');
 
       const sessionSecurity = await getSessionSecurity(url);
       const sessionPayload = sessionSecurity.payload;
@@ -723,7 +727,7 @@ Deno.test('framework encrypted storage works for real through .data modules', as
       assertEqual(writeResponse.status, 200, 'encrypted storage write RPC should succeed');
       await writeResponse.arrayBuffer();
 
-      const rawStorage = await readFile(path.join(tempRoot, 'app', 'storage', 'profile.secure.json'), 'utf8');
+      const rawStorage = await Deno.readTextFile(path.join(tempRoot, 'app', 'storage', 'profile.secure.json'));
       assert(!rawStorage.includes('secret-value'), 'encrypted storage should not write plaintext values to disk');
       assert(rawStorage.includes('"cipher": "aes-256-gcm"'), 'encrypted storage should write an authenticated encryption envelope');
 
@@ -1017,7 +1021,7 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
       assert(runtimeSource.includes("callRouterHook('beforeEach'"), 'runtime should call router beforeEach hooks');
       assert(runtimeSource.includes("callRouterHook('notFound'"), 'runtime should call router notFound hooks');
 
-      const serverSource = await readFile(path.join(repoRoot, 'framework', 'server.js'), 'utf8');
+      const serverSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'server.js'));
       assert(serverSource.includes('auth.forbidden ?? auth.unauthorized'), 'server should prefer forbidden redirect targets before unauthorized fallbacks for role mismatches');
     });
   } finally {

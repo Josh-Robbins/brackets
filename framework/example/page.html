@@ -1,0 +1,90 @@
+<!-- framework/example/page.html
+     Interacts with: ../../docs/guide.md#framework-example-package, layout.html, component.html, example.logic
+
+     WHAT THIS IS
+       Routed page template (copy to app/). Root index.html remains entry-only; page markup lives here.
+
+     HOW TO USE (after copy)
+       1. app/page.html (or app/pages/... and fix `html:` in .view). Match example.view `html:` path.
+       2. Deno host (`run app`). Directives tour — Syntax:
+          https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#syntax
+          https://josh-robbins.github.io/brackets/reference.html#syntax
+       3. :fill / :area; :use matches component base name.
+
+     Uses: #id, [name], :state, :calc, :text, :show, :if, :each, :bind, @click, mutate(), :use, :props,
+       :fill, :class.*, :set.*
+-->
+
+<template :fill="'header'">
+  <p [example-header-note]>
+    <a href="#example-page" :set.aria-label="'Skip to main content'">Skip to main</a>
+    — Example route
+  </p>
+</template>
+
+<main
+  #example-page
+  [example-page]
+  :state="{
+    title: 'Example',
+    message: '',
+    open: true,
+    count: 0,
+    saving: false,
+    error: '',
+    items: ['.view', '.logic', '.data'],
+    form: { note: '' }
+  }"
+  :calc="{ noteLen: (form.note || '').length }">
+
+  <h1 :text="title"></h1>
+  <p :text="message"></p>
+
+  <!-- :if / :show — conditional rendering (prefer :text for dynamic strings; :html only when trusted) -->
+  <section :if="open" [example-panel]>
+    <p><strong>Panel</strong> is visible when <code>open</code> is true (<code>:if</code>).</p>
+  </section>
+
+  <p :show="!open" [example-collapsed-hint]>Panel is hidden (<code>:show</code>).</p>
+
+  <div [example-actions]>
+    <button type="button" @click="toggleOpen">Toggle panel (<code>@click</code> → .logic)</button>
+    <button type="button" @click="mutate('count', count + 1)">
+      Increment (<code>mutate</code>): <span :text="count"></span>
+    </button>
+  </div>
+
+  <!-- :each — list rendering -->
+  <ul [example-list] aria-label="File types">
+    <template :each="item in items">
+      <li :text="item"></li>
+    </template>
+  </ul>
+
+  <!-- :bind + save round trip: page.html → example.logic saveNote() → example.data save() → @storage/ -->
+  <label [example-field]>
+    <span>Note</span>
+    <input type="text" :bind="form.note" placeholder="Type here" autocomplete="off" />
+  </label>
+  <p :text="'Characters: ' + noteLen"></p>
+
+  <div [example-save-row]>
+    <button type="button" @click="saveNote" :set.disabled="saving">Save note</button>
+    <span :show="saving" [example-saving]>Saving…</span>
+  </div>
+
+  <!-- :show + :text for error state from .logic try/catch -->
+  <p :show="error" [example-error] :text="error"></p>
+
+  <!-- :class.* — reactive class toggles -->
+  <p [example-pill] :class.on="count > 0" :class.off="count === 0" :text="count > 0 ? 'Count is positive' : 'Count is zero'"></p>
+
+  <div :use="'component'" :props="{
+    label: 'Reusable block',
+    highlight: true,
+    showHint: true,
+    hint: 'Passed via :props; use props.* inside the fragment.'
+  }"></div>
+
+  <!-- Remote reads/writes: put HTTP/SSE in .api and call from .logic (reference.md Transport helpers + .api). -->
+</main>

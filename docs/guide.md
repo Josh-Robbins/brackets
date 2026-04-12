@@ -34,7 +34,7 @@ That means:
 - you should be able to move the same app toward desktop or server use
 - you should not need a package-manager install path to understand or use the framework
 
-The professional release target is documented in [release.md](C:\Users\joshr\Documents\dev\Brackets\docs\release.md).
+The professional release target is documented in [release.md](./release.md).
 
 ## Plugin model
 
@@ -135,6 +135,76 @@ For most teams and evaluators, the best first workflow is:
 3. Add `.api` only when the app needs shared authority or external services.
 4. Run `config show`, `status server`, `health`, and `test app` often instead of waiting for confusion later.
 5. Keep files small enough that each one still has one honest job.
+
+## Framework example package
+
+The repo ships a **copy-paste** multi-file example under [`framework/example/`](../framework/example/). Nothing in that folder is served by the host until you copy files into your package [`app/`](../app/) (and create `app/data/`, `app/storage/` as needed).
+
+### Framework demo vs `framework/example`
+
+| Location | Role |
+|----------|------|
+| [`framework/demo/`](../framework/demo/) | Runnable **packaged demo** app the built-in host can serve. |
+| [`framework/example/`](../framework/example/) | **Templates** showing one full route: `.view` + layout + page + component + `.logic` + `.data` wired together. |
+
+Use the demo to see Brackets running out of the box; use the example folder when you want a **known-good file set** to copy into `app/`.
+
+### Package entry (root `index.html`)
+
+Root [`index.html`](../index.html) is the **package entry only**. The built-in host serves it first. It should stay a thin shell:
+
+- **Import map** — aliases such as `@framework/`, `@app/`, and `brackets` → `/framework/runtime.js` so browser modules resolve predictably.
+- **Bootstrap** — `import "brackets"` loads the runtime (see comments in `index.html`).
+- **Mount point** — a single `<main id="app-root">` (or equivalent) is where the runtime owns the UI region.
+
+Do **not** paste example layouts or page bodies into `index.html`. Those belong in `app/` as `.html` / `.view`-referenced files, matching the comments in `index.html` (“entry only,” “not a page template”).
+
+Adding the example route means **new files under `app/`** and a `.view` that registers the route — **without** turning `index.html` into a second page template.
+
+### Copy the example into your app
+
+1. Copy [`example.view`](../framework/example/example.view) into `app/` (keep the name or rename; keep the `.view` extension).
+2. Copy [`page.html`](../framework/example/page.html), [`layout.html`](../framework/example/layout.html), [`component.html`](../framework/example/component.html), and [`example.logic`](../framework/example/example.logic) into `app/` so paths match the manifest (the sample uses a **flat** `app/` layout and `@app/...` in the `.view`).
+3. Copy [`example.data`](../framework/example/example.data) to **`app/data/example.data`** — the module id is the basename without `.data` (`example`), matching `data: { example: '@data/example.data' }` in the `.view`.
+4. Ensure `app/storage/` exists if you use the sample JSON path; the example persists a note via `storage.json('@storage/example-note.json')` under `app/storage/`.
+5. Register the route in your app’s view list / router the same way other pages are registered (the sample route is `/example`).
+6. Run the app with the packaged CLI (`run app`, `run app dev`) — see [`framework/agents.md`](../framework/agents.md).
+
+If you use nested folders (`app/pages/`, `app/views/`, …), update every path in the `.view` file to match (import-map aliases like `@pages/` are supported by the host).
+
+### Files in the package
+
+| File | Purpose |
+|------|---------|
+| `example.view` | Page manifest: `page({ ... })` with `html`, `logic`, `layout`, `data`, route `/example`. |
+| `page.html` | Routed page template; exercises many directives (see [Reference: Syntax](./reference.md#syntax)). |
+| `layout.html` | Shared shell with `:mount` and optional `:area` / `:fill` slots. |
+| `component.html` | Fragment loaded by `:use` from the page. |
+| `example.logic` | Lifecycle and actions (`mount`, `toggleOpen`, `saveNote`). |
+| `example.data` | Local model: `read` / `save` with `storage.json` under `@storage/`. |
+
+### Optional layout after copy (flat `app/`)
+
+```text
+app/
+  example.view
+  page.html
+  layout.html
+  component.html
+  example.logic
+  data/
+    example.data
+  storage/
+    example-note.json   ← created at runtime by the sample
+```
+
+### Syntax and reference links
+
+- **In-repo:** [Reference](./reference.md) — [Syntax](./reference.md#syntax), [Template and layout directives](./reference.md#template-and-layout-directives), [Transport helpers](./reference.md#transport-helpers), [Storage guidance](./reference.md#storage-guidance), [Runtime rendering](./reference.md#runtime-rendering).
+- **GitHub (markdown anchors):** [reference.md on `main`](https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#syntax) — same headings as the local file.
+- **GitHub Pages (coarse sections):** [reference.html#syntax](https://josh-robbins.github.io/brackets/reference.html#syntax), [reference.html#transport](https://josh-robbins.github.io/brackets/reference.html#transport) — fewer subsection anchors than `reference.md`.
+
+Browse the templates in the repo: [`framework/example`](https://github.com/Josh-Robbins/brackets/tree/main/framework/example).
 
 ## Modern flat-file app model
 

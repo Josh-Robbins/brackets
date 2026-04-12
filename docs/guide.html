@@ -105,6 +105,28 @@
               </div>
             </section>
 
+            <section id="framework-example">
+              <h2>Framework example package</h2>
+              <p>
+                The repo includes <strong><code>framework/example/</code></strong> — copy-paste templates for one full route
+                (<code>.view</code>, layout, page, component, <code>.logic</code>, <code>.data</code>). Nothing there runs until you copy
+                files into <code>app/</code> (and <code>app/data/</code>, <code>app/storage/</code> as needed).
+                <strong><code>framework/demo/</code></strong> is the runnable packaged demo; the example folder is for learning the file
+                wiring.
+              </p>
+              <p>
+                Root <strong><code>index.html</code></strong> stays the package entry only: import map, <code>import "brackets"</code>,
+                and <code>#app-root</code>. Do not paste example layouts into <code>index.html</code> — routes and templates belong under
+                <code>app/</code>.
+              </p>
+              <p>
+                Full workflow, file table, and links:
+                <a href="https://github.com/Josh-Robbins/brackets/blob/main/docs/guide.md#framework-example-package">Guide on GitHub</a>
+                ·
+                <a href="https://github.com/Josh-Robbins/brackets/tree/main/framework/example"><code>framework/example</code> source</a>
+              </p>
+            </section>
+
             <section id="spa">
               <h2>Build a fast SPA</h2>
               <p>
@@ -167,6 +189,7 @@
             <nav>
               <a href="#mental-model">Mental model</a>
               <a href="#small-files">Small files</a>
+              <a href="#framework-example">Example package</a>
               <a href="#spa">Fast SPA</a>
               <a href="#local-first">Local-first</a>
               <a href="#connected">Connected app</a>

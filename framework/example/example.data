@@ -1,0 +1,41 @@
+/* framework/example/example.data
+ * Interacts with: ../../docs/guide.md#framework-example-package, example.logic
+ *
+ * WHAT THIS IS
+ *   Local model: validation, persistence. Host discovers `*.data` under `app/data/` after you copy this
+ *   to `app/data/example.data`. Package entry remains root `index.html`.
+ *
+ * HOW TO USE (after copy)
+ *   1. `app/data/example.data` → module id `example`; wire in `.view` as `data: { example: '@data/...' }`.
+ *   2. `storage.json('@storage/...')` → files under `app/storage/`.
+ *   3. Remote authority: `.api` (not this file). Storage / transport contract:
+ *      https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#storage-guidance
+ */
+
+function normalizeNote(input) {
+  return {
+    message: String(input?.message ?? '').trim()
+  }
+}
+
+({
+  async read({ storage }) {
+    const raw = await storage.json('@storage/example-note.json').read({
+      message: 'Hello from .data — adjust paths and rules in this file.'
+    })
+    return normalizeNote(raw)
+  },
+
+  async save({ storage }, note) {
+    const clean = normalizeNote(note)
+
+    if (!clean.message) {
+      const error = new Error('Note message is required.')
+      error.code = 'NOTE_INVALID'
+      throw error
+    }
+
+    await storage.json('@storage/example-note.json').write(clean)
+    return clean
+  }
+})

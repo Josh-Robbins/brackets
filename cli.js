@@ -1,9 +1,13 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-net --allow-run
+#!/bin/sh
+// 2>/dev/null; PLATFORM="$(uname -s)-$(uname -m)"; case "$PLATFORM" in Darwin-arm64) P=darwin-arm64;; Darwin-x86_64) P=darwin-x64;; Linux-aarch64) P=linux-arm64;; Linux-x86_64) P=linux-x64;; *) echo "Unsupported platform: $PLATFORM" >&2; exit 1;; esac; exec "$(dirname "$0")/framework/host/$P/deno" run --allow-read --allow-write --allow-net --allow-run --allow-env "$0" "$@"
 
 import path from 'node:path';
-import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createServer, parseYaml } from './framework/server.js';
+
+function existsSync(p) {
+  try { Deno.statSync(p); return true; } catch { return false; }
+}
 
 const PACKAGE_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
 const FRAMEWORK_HOST_ROOT = path.join(PACKAGE_ROOT, 'framework', 'host');
@@ -112,6 +116,94 @@ async function probeHostOrigin(origin) {
   } catch {
     return null;
   }
+}
+
+async function localHostPids(port) {
+  const targetPort = Number(port);
+  if (!Number.isFinite(targetPort) || targetPort <= 0) {
+    return [];
+  }
+
+  if (Deno.build.os === 'windows') {
+    const command = new Deno.Command('powershell', {
+      args: [
+        '-NoProfile',
+        '-Command',
+        `Get-NetTCPConnection -LocalPort ${targetPort} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess`
+      ],
+      stdout: 'piped',
+      stderr: 'null'
+    });
+    const result = await command.output().catch(() => null);
+    if (!result || !result.success) {
+      return [];
+    }
+    return new TextDecoder()
+      .decode(result.stdout)
+      .split(/\r?\n/)
+      .map((line) => Number(String(line).trim()))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  }
+
+  const command = new Deno.Command('lsof', {
+    args: ['-ti', `tcp:${targetPort}`],
+    stdout: 'piped',
+    stderr: 'null'
+  });
+  const result = await command.output().catch(() => null);
+  if (!result || !result.success) {
+    return [];
+  }
+  return new TextDecoder()
+    .decode(result.stdout)
+    .split(/\r?\n/)
+    .map((line) => Number(String(line).trim()))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
+
+async function stopEmbeddedHostByPort(config) {
+  const port = Number(config?.port ?? 4173);
+  const pids = [...new Set(await localHostPids(port))];
+  if (!pids.length) {
+    return false;
+  }
+
+  for (const processId of pids) {
+    try {
+      Deno.kill(processId, Deno.build.os === 'windows' ? 'SIGTERM' : 'SIGTERM');
+    } catch {
+      // Ignore processes that have already exited or cannot be signaled.
+    }
+  }
+
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    const remaining = await localHostPids(port);
+    if (!remaining.length) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+
+  const remaining = [...new Set(await localHostPids(port))];
+  for (const processId of remaining) {
+    try {
+      Deno.kill(processId, 'SIGKILL');
+    } catch {
+      // Ignore processes that cannot be terminated anymore.
+    }
+  }
+
+  const settleDeadline = Date.now() + 2000;
+  while (Date.now() < settleDeadline) {
+    const active = await localHostPids(port);
+    if (!active.length) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+
+  return (await localHostPids(port)).length === 0;
 }
 
 function helpText(config = {}) {
@@ -235,9 +327,25 @@ async function startServer(mode = 'dynamic') {
 }
 
 async function stopServer() {
+  const config = parseRootConfig();
+
   if (!runningServer) {
-    console.log('Brackets server is not running.');
-    return;
+    if (isExternalRuntime(config)) {
+      console.log('Brackets server is not running.');
+      return;
+    }
+    const attached = await probeHostOrigin(configuredOrigin(config));
+    if (!attached) {
+      console.log('Brackets server is not running.');
+      return;
+    }
+    runningServer = {
+      mode: config.mode ?? 'dynamic',
+      startedAt: Date.now(),
+      attached: true,
+      origin: attached.origin,
+      host: attached.host
+    };
   }
 
   const current = runningServer;
@@ -247,7 +355,8 @@ async function stopServer() {
     return;
   }
   if (current.attached) {
-    console.log('Brackets attached host session cleared.');
+    const stopped = await stopEmbeddedHostByPort(config);
+    console.log(stopped ? 'Brackets server stopped.' : 'Brackets could not stop the running host.');
     return;
   }
 
@@ -407,13 +516,13 @@ async function executeCommand(parts) {
 
   if ((first === 'run' && second === 'app') || (first === 'start' && second === 'server')) {
     if (externalMode) {
-      console.log('Brackets is in external host mode.');
-      console.log('Start the external server yourself, then use status server, health, or test app.');
-      return true;
-    }
-    if (externalMode && third === 'dev') {
-      console.log('Brackets dev watch mode is only available with the built-in embedded host.');
-      console.log('Switch runtime back to embedded if you want run app dev.');
+      if (third === 'dev') {
+        console.log('Brackets dev watch mode is only available with the built-in embedded host.');
+        console.log('Switch runtime back to embedded if you want run app dev.');
+      } else {
+        console.log('Brackets is in external host mode.');
+        console.log('Start the external server yourself, then use status server, health, or test app.');
+      }
       return true;
     }
     const mode = third === 'dev' ? 'dev' : 'dynamic';
@@ -521,7 +630,7 @@ async function shutdown() {
     return;
   }
   shuttingDown = true;
-  if (runningServer) {
+  if (runningServer?.instance) {
     await stopServer();
   }
 }
@@ -543,6 +652,29 @@ function commandNeedsSignalHandlers(args) {
     return true;
   }
   return (args[0] === 'run' && args[1] === 'app') || (args[0] === 'start' && args[1] === 'server');
+}
+
+const REEXEC_ENV = '__BRACKETS_BUNDLED';
+
+if (!Deno.env.get(REEXEC_ENV)) {
+  const engine = bundledEnginePath();
+  if (existsSync(engine)) {
+    const result = new Deno.Command(engine, {
+      args: [
+        'run',
+        '--allow-read', '--allow-write', '--allow-net', '--allow-run', '--allow-env',
+        fileURLToPath(import.meta.url),
+        ...Deno.args
+      ],
+      cwd: PACKAGE_ROOT,
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+      env: { ...Deno.env.toObject(), [REEXEC_ENV]: '1' }
+    });
+    const status = await result.output();
+    Deno.exit(status.code);
+  }
 }
 
 const args = [...Deno.args];

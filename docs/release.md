@@ -31,12 +31,12 @@ Brackets/
     datastar.js
     runtime.js
     syntax.js
-    docs.md
     agents.md
     demo/
       splash.html
       logo.svg
       favicon.svg
+    example/
   app/
   tests/
     test.js
@@ -140,7 +140,7 @@ Brackets should feel closer to shipping a well-structured site/app folder than s
 
 For Docker-based local and production deployment patterns, read:
 
-- [docker.md](C:\Users\joshr\Documents\dev\Brackets\docs\docker.md)
+- [docker.md](./docker.md)
 
 ## Professional Release Standard
 

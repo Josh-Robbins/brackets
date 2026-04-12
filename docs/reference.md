@@ -523,8 +523,7 @@ General rule:
 - `:use` and `:props` describe what gets loaded and what inputs it receives.
 - for component/template composition, `:props` should become local signals for the used block so inner Datastar bindings can stay simple
 - template composition should ignore stale async template resolutions and rerender when the referenced template stamp, props, or fills change
-- nested `:use`, `:fill`, `:if`, and `:each` trees should keep settling until the composed DOM reaches a stable result
-- framework-managed directives should rerun when existing directive attributes change in place, not only when new nodes are patched into the DOM
+- nested `:use`, `:fill`, `:if`, and `:each` trees should reach a stable composed DOM; inner markup is driven by **Datastar attribute plugins** for those directives, so updates follow **signal and expression dependencies** rather than a separate DOM polling loop
 
 ## Dynamic DOM Directives
 
@@ -549,22 +548,27 @@ These names are part of the public language inventory because they shape how aut
 
 | Name | Meaning in Brackets | Datastar relation | Status |
 |---|---|---|---|
-| `self` | The current scope or current mounted instance. | Brackets scope sugar. Datastar still operates on the resolved signals underneath. | `Locked` |
-| `parent` | The nearest mounted parent scope, not the raw DOM parent. | Brackets scope sugar resolved to the parent's Datastar signal path. | `Locked` |
-| `children` | Runtime-maintained list of mounted child scopes. | Brackets scope sugar backed by scoped signals or derived values. | `Locked` |
-| `root` | The root scope for the current mounted tree. | Brackets scope sugar. | `Locked` |
-| `props` | Inputs passed into the current used template/component/page. | Brackets concept that should become scoped signals so Datastar can react to it. | `Locked` |
+| `self` | The current component scope object for the element, when set (see runtime note below). | Same names usually map to `$name` in Datastar-backed expressions via `:state` / signals. | `Locked` |
+| `parent` | The nearest **ancestor element** that carries a Brackets component scope (`__bScope`), not the raw DOM parent. | Exposed as a plain object for `window.BracketsRuntime.scope(el)` and compiled `scope(el).parent` in expressions. | `Locked` |
+| `children` | Reserved for richer composition; the runtime currently exposes an **empty array** while the public name stays stable. | Prefer Datastar signals and `:each` for child lists. | `Locked` |
+| `root` | For scope bridge: **parent scope if any, else the current `self` object**. | Not a full shadow tree walk of every ancestor `:state`. | `Locked` |
+| `props` | Same object as **`self`** when props come from `:use` / `:props` (merged object on the host element). | `:props` are applied as local signals via `data-signals` so inner `:text` / `:bind` stay simple. | `Locked` |
 | `event` | The current event in author-facing expressions. | Brackets-friendly alias over Datastar's event context. Datastar itself exposes `evt` in `data-on` expressions. | `Locked` |
+
+### Runtime scope bridge (`BracketsRuntime.scope`)
+
+For **Datastar-backed** attributes (`data-text`, `data-show`, `:calc`, etc.), the compiler rewrites helpers like `props.title` to **`window.BracketsRuntime.scope(el).props.title`**. The scope bridge is intentionally small:
+
+- **`self` / `props`** come from the element’s **`__bScope`** (set when `:use` applies `:props`, or when you assign that object in advanced cases).
+- **`parent`** is the **`__bScope`** of the nearest ancestor that has one, walking real DOM parents only.
+- Ancestor **`:state`** blocks still define Datastar signals on their own nodes; they are **not** merged into this bridge unless that state is also reflected in a **`__bScope`** chain you rely on. For cross-cutting values, prefer **signal names** (`$foo`) or explicit props.
+
+This keeps the engine **Datastar-native** while preserving the author-facing helper names in expressions.
 
 ### Scope helper rule
 
-The important note direction is:
-
-- these helpers are sugar over Datastar signals
-- they are not a separate reactive store
-- in Datastar-backed expressions, Brackets resolves them through the runtime scope bridge instead of inventing a second client store
-
-That is especially important for `parent`, `children`, and `props`.
+- Helpers are **not** a second reactive store behind Datastar.
+- Prefer **`$signal`** paths in markup for values that must track reactively; use **`scope(el)`** for object-style helpers (`route`, `nav`, `session`, etc.) and for **`props` / `self`** on composed components.
 
 ## Transport Helpers
 

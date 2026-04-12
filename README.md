@@ -17,7 +17,7 @@ Current public status:
 ## Start Here
 
 - [Docs front page](./docs/index.md)
-- [Getting started](./docs.md)
+- [Getting started](./docs/index.md#getting-started)
 - [Guide](./docs/guide.md)
 - [Reference](./docs/reference.md)
 
@@ -25,7 +25,7 @@ Current public status:
 
 If you are evaluating Brackets for the first time, use this order:
 
-1. Read [Getting started](./docs.md)
+1. Read [Getting started](./docs/index.md#getting-started)
 2. Skim [Guide](./docs/guide.md)
 3. Start the root CLI entry for your OS.
 4. Run `info` and `config show`.
@@ -151,9 +151,10 @@ The smallest useful Brackets app can be just a few files:
 Brackets/
   framework/
   app/
-    home.view
-    home.html
-    home.logic
+    home/
+      home.view
+      home.html
+      home.logic
   tests/
     test.js
   cli.js
@@ -239,7 +240,7 @@ That is the best default because it matches the framework itself:
 ## Documentation
 
 - [Docs Home](./docs/index.md)
-- [Getting started](./docs.md)
+- [Getting started](./docs/index.md#getting-started)
 - [Guide](./docs/guide.md)
 - [Reference](./docs/reference.md)
 - [Modern architecture](./docs/guide.md#modern-flat-file-app-model)
@@ -248,6 +249,9 @@ That is the best default because it matches the framework itself:
 - [Platform](./docs/platform.md)
 - [Release](./docs/release.md)
 - [Agents](./docs/agents.md)
+
+Repo tooling: the host imports **`jsr:@std/yaml@1.0.12`** directly from [`framework/server.js`](framework/server.js) for `config.yaml` and storage helpers. Run the integration suite with the bundled engine, for example:  
+`framework/host/<platform>/deno test tests/test.js --allow-all` (Windows: `deno.exe` in that folder).
 
 ## Current State
 

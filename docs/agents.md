@@ -15,8 +15,8 @@ Use this document as an execution contract, not as loose advice.
 
 Before going deep, also read:
 
-- [docs.md](../docs.md) for the simple start path
-- [guide.md](./guide.md) for step-by-step examples
+- [index.md](./index.md) for the documentation front door
+- [guide.md](./guide.md) for step-by-step examples (including [Framework example package](./guide.md#framework-example-package))
 - [reference.md](./reference.md) for the language contract
 - [platform.md](./platform.md) for host and deployment expectations
 
@@ -26,6 +26,25 @@ Current public status:
 - keep syntax locked
 - keep Datastar as the engine
 - optimize for outside testing and production-style evaluation, not public contract churn
+
+## MCP usage rules
+
+When an MCP server matches the task, use it before falling back to ad hoc shell work or generic browsing.
+
+Preferred order:
+
+- use the `Security` MCP first for security, auth, headers, validation, session, storage, hardening, and OWASP-aligned decisions
+- use the `Context` MCP first for library and framework documentation, especially Datastar and other technical dependencies
+- use the `repo` MCP first for reading and inspecting workspace files when it is sufficient
+- use the `devtools` MCP first for live browser inspection of Brackets pages, local hosts, and published docs pages
+- use the `internet` MCP for current external facts, current product information, rate-sensitive lookups, and web research when the answer is not already in local docs or Context
+
+Operational rules:
+
+- prefer the least-powerful MCP that fully answers the question
+- do not pretend an MCP is healthy if it is unavailable, rate-limited, or has a closed transport
+- if an MCP is temporarily unhealthy, say so briefly and use the best honest fallback
+- keep Brackets docs, runtime decisions, and security decisions aligned with MCP-backed primary sources when available
 
 ## Core identity
 
@@ -170,7 +189,7 @@ The user may start with:
 
 Only introduce folders such as `views/`, `pages/`, `layouts/`, `components/`, `logic/`, `api/`, `data/`, or `storage/` when the app becomes large enough to need them.
 
-For the human-facing start path, send people to [docs.md](../docs.md) first.
+For the human-facing start path, send people to [index.md](./index.md) first.
 
 ## What each top-level part means
 
@@ -183,9 +202,9 @@ Minimum direction:
 - `datastar.js`
 - `runtime.js`
 - `syntax.js`
-- `docs.md`
 - `agents.md`
-- `demo/`
+- `demo/` (runnable packaged demo)
+- `example/` (copy-paste templates for `app/` — see [Guide: Framework example package](./guide.md#framework-example-package))
 
 This folder should contain framework/runtime knowledge, not user app code.
 
@@ -203,14 +222,16 @@ Do not assume the app must begin with nested folders.
 
 If the user asks for examples or a practical path forward, prefer linking them to:
 
-- [docs.md](../docs.md)
-- [guide.md](./guide.md)
-- `framework/demo/` for the starter assets only
+- [index.md](./index.md)
+- [guide.md](./guide.md) — especially [Framework example package](./guide.md#framework-example-package) for a full single-route template set under `framework/example/`
+- `framework/demo/` for the runnable starter assets
+- `framework/example/` for copy-paste multi-file templates (not served until copied into `app/`)
 
-If the user asks about Docker, production deployment, or backend pairing, prefer these sections in [docs.md](../docs.md):
+If the user asks about Docker, production deployment, or backend pairing, prefer:
 
-- [Docker setup](../docs.md#docker-setup)
-- [Production setup](../docs.md#production-setup)
+- [docker.md](./docker.md#production-docker-shape)
+- [platform.md](./platform.md#6-distribution-contract)
+- [release.md](./release.md)
 
 ### Root config
 
@@ -233,7 +254,7 @@ Tests should stay simple and flat by default.
 
 ### Root files
 
-- `index.html` is the obvious entry point
+- `index.html` is the package entry: import map, runtime bootstrap (`import "brackets"`), and `#app-root` — not where normal page or layout markup lives (that stays under `app/` via `.view` / `.html`)
 - `robots.txt` is the default website root file
 - `README.md` explains how to use the starter
 Other top-level files may be added later only when needed.
@@ -259,9 +280,10 @@ Smallest sensible starting point:
 
 ```text
 app/
-  home.view
-  home.html
-  home.logic
+  home/
+    home.view
+    home.html
+    home.logic
 ```
 
 Example:
@@ -270,8 +292,8 @@ Example:
 page({
   id: 'home',
   route: '/',
-  html: '@app/home.html',
-  logic: '@app/home.logic'
+  html: '@app/home/home.html',
+  logic: '@app/home/home.logic'
 })
 ```
 
@@ -331,7 +353,7 @@ Minimum:
 page({
   id: 'home',
   route: '/',
-  html: '@app/home.html'
+  html: '@app/home/home.html'
 })
 ```
 

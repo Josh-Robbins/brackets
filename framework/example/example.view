@@ -1,0 +1,45 @@
+/*
+ * framework/example/example.view
+ * Interacts with: ../../docs/guide.md (Framework example package), ../../framework/agents.md, page.html,
+ *   layout.html, example.logic, app/data/example.data
+ *
+ * WHAT THIS IS
+ *   Page manifest: `page({ ... })` is what the host reads from a `.view` file. Copy-paste only — nothing
+ *   under `framework/example/` runs until copied into `app/`. Root `index.html` stays the package entry
+ *   (import map + runtime + #app-root); add routes here under `app/`, not in `index.html`.
+ *
+ * Docs: ../../docs/guide.md#framework-example-package
+ *   Published: https://github.com/Josh-Robbins/brackets/blob/main/docs/guide.md#framework-example-package
+ *
+ * HOW TO USE (after copy)
+ *   1. Place under `app/` (e.g. `example.view`). Copy `layout.html`, `page.html`, `component.html`,
+ *      `example.logic`, and `app/data/example.data` — flat `app/` paths below.
+ *   2. Host: packaged Deno host (`cli`, `run app`) — see framework/agents.md.
+ *   3. Backends: optional `.api` + `proxies` / `external.origin` — reference:
+ *      https://github.com/Josh-Robbins/brackets/blob/main/docs/reference.md#transport-helpers
+ *      https://josh-robbins.github.io/brackets/reference.html#transport
+ *   4. Nested folders (`app/pages/` …): update paths; `@pages/` etc. supported via import map.
+ *
+ * PATH PRESETS (flat `app/`)
+ *   html: @app/page.html   logic: @app/example.logic   layout: @app/layout.html
+ *   data: @data/example.data → app/data/example.data (module id `example`)
+ */
+
+page({
+  id: 'example',
+  route: '/example',
+  title: 'Example',
+  meta: {
+    description: 'Brackets example page manifest; copy from framework/example/ into your app/.'
+  },
+  seo: {
+    changefreq: 'daily',
+    priority: 0.5
+  },
+  html: '@app/page.html',
+  logic: '@app/example.logic',
+  layout: '@app/layout.html',
+  data: {
+    example: '@data/example.data'
+  }
+})

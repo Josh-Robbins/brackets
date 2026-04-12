@@ -49,14 +49,15 @@ host: 127.0.0.1
 port: 4173
 
 entry:
-  # Folder the host treats as the package entry root.
-  # "." means the main Brackets folder itself.
-  folder: .
+  # Folder (under this package) the host treats as the entry root.
+  # The host serves that folder's index.html for `/` and resolves static files from it.
+  # Use "." for package root, or e.g. framework/demo for the shipped starter surface.
+  folder: framework/demo
 
   # Route Brackets should treat as the first app route when autoStart is enabled.
   route: /
 
-  # false = show the root index.html starter first
+  # false = show this entry folder's index.html first (at /)
   # true  = hand off into entry.route automatically
   autoStart: false
 
@@ -67,37 +68,6 @@ external:
   # Example:
   # origin: http://127.0.0.1:8080
   origin: ""
-
-branding:
-  # Product name and starter-shell branding.
-  name: Brackets
-  title: Brackets
-  tagline: No build step. HTML first. Datastar underneath.
-
-  # Main visual theme colors for the framework starter shell.
-  accent: "#714cb6"
-  accentSoft: "#cdb8f3"
-  canvas: "#fcfaf7"
-  panel: "#ffffff"
-  ink: "#241013"
-  muted: "#5b5361"
-
-splash:
-  # true = allow the framework starter splash
-  # false = reserved for a more app-direct startup path later
-  enabled: true
-
-  # Short chips shown on the framework starter page.
-  chips:
-    - No build step
-    - Datastar engine
-    - Built-in Deno host
-
-  # Quick first-run hints shown on the starter page.
-  hints:
-    - Edit files in app/
-    - Keep templates in .html and behavior in .logic
-    - Use .data for local models and .api for backend transport
 
 security:
   # HTML trust level for framework-managed HTML insertion.
@@ -112,12 +82,3 @@ security:
 
     # PBKDF2 iterations for host-side encrypted storage helpers.
     pbkdf2Iterations: 250000
-
-health:
-  # Host timing thresholds used by the starter health card and CLI health checks.
-  hostWarnMs: 420
-  hostFailMs: 850
-
-  # App timing thresholds reserved for deeper runtime checks.
-  appWarnMs: 520
-  appFailMs: 950

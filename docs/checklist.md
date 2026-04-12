@@ -2,7 +2,7 @@
 
 This document turns the reference into a practical path forward for the codebase.
 
-The compact canonical summary lives in [reference.md](C:\Users\joshr\Documents\dev\Brackets\docs\reference.md) and should be treated as the fast-scanning contract. This checklist exists to turn that contract into implementation work.
+The compact canonical summary lives in [reference.md](./reference.md) and should be treated as the fast-scanning contract. This checklist exists to turn that contract into implementation work.
 
 It is intentionally biased toward the project goals:
 
@@ -810,9 +810,9 @@ If a change fails several of these tests, it is probably moving away from the pr
 
 The next concrete work in this repo should be:
 
-1. Tighten [syntax.js](C:\Users\joshr\Documents\dev\Brackets\framework\syntax.js) so the syntax contract stays centralized and Datastar-first.
-2. Tighten [runtime.js](C:\Users\joshr\Documents\dev\Brackets\framework\runtime.js) so Datastar owns the reactive binding path and Brackets stays focused on framework-only behavior.
-3. Tighten [server.js](C:\Users\joshr\Documents\dev\Brackets\framework\server.js) around allowlists, request limits, and a smaller framework boundary.
+1. Tighten [syntax.js](../framework/syntax.js) so the syntax contract stays centralized and Datastar-first.
+2. Tighten [runtime.js](../framework/runtime.js) so Datastar owns the reactive binding path and Brackets stays focused on framework-only behavior.
+3. Tighten [server.js](../framework/server.js) around allowlists, request limits, and a smaller framework boundary.
 4. Design the `.data` execution path so local `.json`, `.yaml`, and `.db` storage works through framework-controlled adapters without breaking backend agnosticism.
 5. Keep the router and local host, but make them clearly shell/framework services rather than a replacement frontend runtime.
 6. Add a host-adapter contract for Tauri and C# / WebView2-style hosts.

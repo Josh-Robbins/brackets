@@ -16,10 +16,10 @@ Use this document as an execution contract, not as loose advice.
 
 Read in this order:
 
-1. [docs.md](../docs.md) for the simple start path
-2. [guide.md](./guide.md) for practical build patterns
-3. [reference.md](./reference.md) for the exact contract
-4. [platform.md](./platform.md) for host and deployment expectations
+1. [docs/index.md](../docs/index.md) for the documentation front door
+2. [guide.md](../docs/guide.md) for practical build patterns (including [Framework example package](../docs/guide.md#framework-example-package))
+3. [reference.md](../docs/reference.md) for the exact contract
+4. [platform.md](../docs/platform.md) for host and deployment expectations
 
 Current public status:
 
@@ -28,6 +28,25 @@ Current public status:
 - keep Brackets as the main story
 - keep Datastar and Deno underneath as the engines
 - optimize for production-style testing and outside use, not public contract churn
+
+## MCP usage rules
+
+When an MCP server matches the task, use it before falling back to ad hoc shell work or generic browsing.
+
+Preferred order:
+
+- use the `Security` MCP first for security, auth, headers, validation, session, storage, hardening, and OWASP-aligned implementation decisions
+- use the `Context` MCP first for framework and library documentation, especially Datastar and related technical dependencies
+- use the `repo` MCP first for reading and inspecting local workspace files when it is sufficient
+- use the `devtools` MCP first for live inspection of the local Brackets app, published docs, and browser behavior
+- use the `internet` MCP for current external facts, product checks, and research when local docs or Context are not enough
+
+Operational rules:
+
+- prefer the least-powerful MCP that fully answers the question
+- do not claim an MCP is working if it is unavailable, rate-limited, or has a closed transport
+- when an MCP is unhealthy, say so plainly and use the best honest fallback
+- keep Brackets implementation choices aligned with MCP-backed primary sources when available
 
 ## Core identity
 
@@ -85,8 +104,9 @@ Brackets adds:
 
 AI should speak about Brackets in this model:
 
-- the package entry point is root `index.html`
+- the package entry point is root `index.html` (import map, `import "brackets"`, `#app-root` — keep it a bootstrap shell; do not paste page or layout markup from examples into it)
 - the starter/demo source lives under `framework/demo/`
+- copy-paste multi-file templates live under `framework/example/` — add routes and files under `app/` only; see [Guide: Framework example package](../docs/guide.md#framework-example-package)
 - the built-in host serves the same package dynamically
 - the built-in host serves root `index.html` first
 - root `index.html` decides the first handoff into the next shell, layout, or app template
@@ -138,10 +158,10 @@ Brackets/
     runtime.js
     syntax.js
     version.js
-    docs.md
     agents.md
     embedded/
     demo/
+    example/
   app/
   tests/
     test.js
@@ -797,6 +817,7 @@ If the user is advanced:
 
 - show routing, preload, auth, `.data`, `.api`, and deployment tradeoffs clearly
 - show REST, SSE, one-repo integration, and backend handoff patterns clearly
+- point to [`framework/example/`](../framework/example/) via [Guide: Framework example package](../docs/guide.md#framework-example-package) for a full single-route slice (`.view`, layout, page, component, `.logic`, `.data`)
 - still avoid introducing new framework concepts that are not part of Brackets
 
 ## Production and deployment workflow
@@ -826,9 +847,9 @@ When production includes another backend:
 
 For hosted docs or deployment guidance, send people to:
 
-- [platform.md](./platform.md)
-- [release.md](./release.md)
-- [docker.md](./docker.md)
+- [platform.md](../docs/platform.md)
+- [release.md](../docs/release.md)
+- [docker.md](../docs/docker.md)
 
 ## What not to do
 
