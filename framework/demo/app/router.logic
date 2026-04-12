@@ -1,0 +1,10 @@
+/* framework/demo/app/router.logic
+ * Interacts with: framework/server.js (discoverRouterLogic), app/home/home.view
+ *
+ * Global router module: hooks and optional declared routes. File-based routes from
+ * app/**/*.view are merged per docs/reference.md precedence.
+ */
+
+({
+  routes: []
+})
