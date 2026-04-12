@@ -208,6 +208,7 @@ export const SYNTAX_CONTRACT = Object.freeze({
 function escapeAttributeValue(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
     .replace(/"/g, '&quot;');
 }
 
@@ -515,7 +516,7 @@ export function transformDatastarExpression(expression, options = {}) {
       } else if (FRAMEWORK_HELPERS.has(identifier)) {
         const helper = FRAMEWORK_HELPERS.get(identifier);
         const next = nextSignificantCharacter(expression, endIndex);
-        if (helper.nativeAction && next === '(') {
+        if (helper.nativeAction && next === '(' && !options.disableNativeTransportActions) {
           output += helper.nativeAction;
         } else {
           output += helper.runtimeTarget;
@@ -549,6 +550,38 @@ function applyDynamicRules(attributes) {
   return nextAttributes;
 }
 
+function transformCalcExpression(expression) {
+  const trimmed = expression.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return transformDatastarExpression(expression, { disableNativeTransportActions: true });
+  }
+  const inner = trimmed.slice(1, -1).trim();
+  if (!inner) {
+    return expression;
+  }
+  const entries = splitTopLevelArguments(inner);
+  const transformed = entries.map((entry) => {
+    const colonIndex = entry.indexOf(':');
+    if (colonIndex === -1) {
+      return entry;
+    }
+    const key = entry.slice(0, colonIndex).trim();
+    const value = entry.slice(colonIndex + 1).trim();
+    return `${key}: () => (${transformDatastarExpression(value, { disableNativeTransportActions: true })})`;
+  });
+  return `{ ${transformed.join(', ')} }`;
+}
+
+function transformEachExpression(expression) {
+  const inMatch = expression.match(/^(.+?)\s+in\s+(.+)$/);
+  if (!inMatch) {
+    return expression;
+  }
+  const vars = inMatch[1].trim();
+  const source = inMatch[2].trim();
+  return `${vars} in ${transformDatastarExpression(source)}`;
+}
+
 function applyStaticRules(attributes) {
   let nextAttributes = attributes;
 
@@ -567,15 +600,25 @@ function applyStaticRules(attributes) {
       if (statusDirective) {
         return statusDirective;
       }
-      if (!rule.datastarAttribute) {
-        return appendAttribute('', rule.frameworkAttribute, unwrapQuotedString(expression) ?? expression);
+      if (rule.name === 'calc') {
+        return appendAttribute('', rule.datastarAttribute, transformCalcExpression(expression));
       }
-
       if (rule.name === 'bind') {
         return appendAttribute('', rule.datastarAttribute, transformDatastarExpression(expression, { bindName: true }));
       }
-
-      return appendAttribute('', rule.datastarAttribute, transformDatastarExpression(expression));
+      if (rule.datastarAttribute) {
+        return appendAttribute('', rule.datastarAttribute, transformDatastarExpression(expression));
+      }
+      if (rule.name === 'if' || rule.name === 'html' || rule.name === 'props') {
+        return appendAttribute('', rule.frameworkAttribute, transformDatastarExpression(expression));
+      }
+      if (rule.name === 'each') {
+        return appendAttribute('', rule.frameworkAttribute, transformEachExpression(expression));
+      }
+      if (rule.name === 'use') {
+        return appendAttribute('', rule.frameworkAttribute, expression);
+      }
+      return appendAttribute('', rule.frameworkAttribute, unwrapQuotedString(expression) ?? expression);
     });
   }
 

@@ -1,5 +1,5 @@
-let frameworkConfig = readJsonScript('brackets-config', {});
-let embeddedHost = readJsonScript('brackets-host', {});
+let frameworkConfig = readJsonScript('config', {});
+let embeddedHost = readJsonScript('host', {});
 let datastarModulePromise = null;
 let appContractPromise = null;
 let activeLogic = null;
@@ -628,21 +628,25 @@ function evaluateFrameworkExpression(source, scope) {
     'event'
   ]);
 
+  const BLOCKED_MEMBER_PROPERTIES = new Set([
+    'constructor',
+    '__proto__',
+    'prototype',
+    '__defineGetter__',
+    '__defineSetter__',
+    '__lookupGetter__',
+    '__lookupSetter__'
+  ]);
+
   function resolveIdentifier(name) {
     if (reservedGlobals.has(name) && Object.prototype.hasOwnProperty.call(globals, name)) {
       return globals[name];
     }
 
-    if (Object.prototype.hasOwnProperty.call(scope.locals, name)) {
-      return scope.locals[name];
-    }
-
-    if (Object.prototype.hasOwnProperty.call(globals, name)) {
-      return globals[name];
-    }
+    const signalName = name.startsWith('$') ? name.slice(1) : name;
 
     try {
-      const value = scope.datastar?.getPath?.(name);
+      const value = scope.datastar?.getPath?.(signalName);
       if (value !== undefined) {
         return value;
       }
@@ -650,8 +654,20 @@ function evaluateFrameworkExpression(source, scope) {
       // no-op
     }
 
-    if (scope.datastar?.root && Object.prototype.hasOwnProperty.call(scope.datastar.root, name)) {
-      return scope.datastar.root[name];
+    if (Object.prototype.hasOwnProperty.call(scope.locals, name)) {
+      return scope.locals[name];
+    }
+
+    if (signalName !== name && Object.prototype.hasOwnProperty.call(scope.locals, signalName)) {
+      return scope.locals[signalName];
+    }
+
+    if (Object.prototype.hasOwnProperty.call(globals, name)) {
+      return globals[name];
+    }
+
+    if (scope.datastar?.root && Object.prototype.hasOwnProperty.call(scope.datastar.root, signalName)) {
+      return scope.datastar.root[signalName];
     }
 
     return undefined;
@@ -681,11 +697,17 @@ function evaluateFrameworkExpression(source, scope) {
         if (object === null || object === undefined) {
           return undefined;
         }
+        if (BLOCKED_MEMBER_PROPERTIES.has(property)) {
+          return undefined;
+        }
         return object[property];
       }
       case 'call': {
         if (node.callee.type === 'member') {
           const { object, property } = getMemberTarget(node.callee);
+          if (BLOCKED_MEMBER_PROPERTIES.has(property)) {
+            return undefined;
+          }
           const fn = object?.[property];
           if (typeof fn !== 'function') {
             return undefined;
@@ -888,7 +910,19 @@ function buildFrameworkScope(element, datastar, event = null) {
 function sanitizeFrameworkHtml(source) {
   const template = document.createElement('template');
   template.innerHTML = String(source ?? '');
-  const blockedTags = new Set(['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED']);
+  const blockedTags = new Set([
+    'SCRIPT',
+    'IFRAME',
+    'OBJECT',
+    'EMBED',
+    'BASE',
+    'META',
+    'LINK',
+    'FORM',
+    'SVG',
+    'MATH',
+    'NOSCRIPT'
+  ]);
   const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_ELEMENT);
   const removals = [];
 
@@ -906,7 +940,10 @@ function sanitizeFrameworkHtml(source) {
         element.removeAttribute(attribute.name);
         continue;
       }
-      if (['href', 'src', 'xlink:href', 'formaction'].includes(name) && /^javascript:/i.test(value)) {
+      if (
+        ['href', 'src', 'xlink:href', 'formaction', 'action', 'poster', 'srcset'].includes(name)
+        && /^(javascript|data|vbscript):/i.test(value)
+      ) {
         element.removeAttribute(attribute.name);
       }
     }
@@ -1726,7 +1763,7 @@ async function fetchSession(force = false) {
     sessionState = nextState;
     sessionFetchedAt = Date.now();
     if (typeof nextState?.csrfToken === 'string' && nextState.csrfToken.trim()) {
-      setMetaContent('brackets-csrf', nextState.csrfToken.trim());
+      setMetaContent('csrf', nextState.csrfToken.trim());
     }
     settleRequestEntry(stateKey, token, {
       loading: false,
@@ -2325,7 +2362,7 @@ function buildRequestInit(method, payload, options = {}) {
     return init;
   }
 
-  const csrfToken = readMetaContent('brackets-csrf');
+  const csrfToken = readMetaContent('csrf');
   if (csrfToken && !headers.has('x-brackets-csrf')) {
     headers.set('x-brackets-csrf', csrfToken);
   }
@@ -2613,7 +2650,7 @@ function currentRouteState() {
 }
 
 async function rpc(kind, moduleName, methodName, args = []) {
-  const csrfToken = readMetaContent('brackets-csrf');
+  const csrfToken = readMetaContent('csrf');
   const response = await fetch('/__brackets/rpc', {
     method: 'POST',
     headers: {
@@ -2881,7 +2918,7 @@ async function loadLogicModule(logicUrl) {
 }
 
 function rootElement() {
-  return document.getElementById('brackets-root');
+  return document.getElementById('app-root');
 }
 
 function mountElement(root) {
@@ -3181,7 +3218,9 @@ async function handleNavigation(pathname, options = {}) {
   visited.add(normalized);
   const contract = await loadAppContract().catch(() => ({ routes: [], router: {} }));
 
-  if (normalized === '/') {
+  const match = matchRoute(contract, normalized);
+
+  if (normalized === '/' && !match) {
     restoreStarterShell();
     if (options.replace) {
       history.replaceState({ brackets: true, path: '/' }, '', '/');
@@ -3190,8 +3229,6 @@ async function handleNavigation(pathname, options = {}) {
     }
     return true;
   }
-
-  const match = matchRoute(contract, normalized);
   if (match) {
     const redirectTarget = match.route?.redirectTo
       ? normalizePath(match.route.redirectTo)
@@ -3246,6 +3283,11 @@ async function applyEntryBehavior(config) {
     return;
   }
 
+  if (contract && matchRoute(contract, '/')) {
+    await handleNavigation('/', { replace: true });
+    return;
+  }
+
   const entry = config?.entry ?? {};
   if (entry.autoStart === true && typeof entry.route === 'string' && entry.route.trim() && entry.route.trim() !== '/') {
     await handleNavigation(entry.route.trim(), { replace: true });
@@ -3271,9 +3313,10 @@ function interceptLinkClicks() {
     }
 
     const contract = await loadAppContract().catch(() => null);
-    const isStarter = normalizePath(url.pathname) === '/';
+    const hasRoutes = Boolean(contract?.routes?.length);
     const isAppRoute = contract ? Boolean(matchRoute(contract, url.pathname)) : false;
-    if (!isStarter && !isAppRoute) {
+    const isStarterHome = normalizePath(url.pathname) === '/' && !hasRoutes;
+    if (!isAppRoute && !isStarterHome) {
       return;
     }
 
@@ -3394,9 +3437,9 @@ function exposeRuntime(config, host) {
 }
 
 async function bootstrap() {
-  frameworkConfig = readJsonScript('brackets-config', {});
-  embeddedHost = readJsonScript('brackets-host', {});
-  sessionState = readJsonScript('brackets-session', { authenticated: false, user: null });
+  frameworkConfig = readJsonScript('config', {});
+  embeddedHost = readJsonScript('host', {});
+  sessionState = readJsonScript('session', { authenticated: false, user: null });
   const root = rootElement();
   starterMarkup = root?.innerHTML ?? '';
   starterTitle = document.title;

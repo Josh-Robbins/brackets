@@ -543,22 +543,29 @@ function buildImportMap(entryFolder) {
   const basePrefix = entryFolder === '.' ? '' : `${toPosix(entryFolder).replace(/^\/+|\/+$/g, '')}/`;
   return {
     imports: {
-      '@app/': `${basePrefix}app/`,
-      '@views/': `${basePrefix}app/views/`,
-      '@pages/': `${basePrefix}app/pages/`,
-      '@layouts/': `${basePrefix}app/layouts/`,
-      '@logic/': `${basePrefix}app/logic/`,
-      '@data/': `${basePrefix}app/data/`,
-      '@api/': `${basePrefix}app/api/`,
-      '@routes/': `${basePrefix}app/routes/`,
-      '@storage/': `${basePrefix}app/storage/`,
-      '@brackets/': 'framework/',
-      '@config/': 'config/'
+      '@app/': `/${basePrefix}app/`,
+      '@views/': `/${basePrefix}app/views/`,
+      '@pages/': `/${basePrefix}app/pages/`,
+      '@layouts/': `/${basePrefix}app/layouts/`,
+      '@logic/': `/${basePrefix}app/logic/`,
+      '@data/': `/${basePrefix}app/data/`,
+      '@api/': `/${basePrefix}app/api/`,
+      '@routes/': `/${basePrefix}app/routes/`,
+      '@storage/': `/${basePrefix}app/storage/`,
+      '@brackets/': '/framework/',
+      '@framework/': '/framework/',
+      '@config/': '/config/',
+      brackets: '/framework/runtime.js'
     }
   };
 }
 
-function buildWebManifest(config, origin) {
+function entryAssetPath(entryFolder, assetName) {
+  const prefix = entryFolder === '.' ? '' : `/${toPosix(entryFolder).replace(/^\/+|\/+$/g, '')}`;
+  return `${prefix}/app/${assetName}`;
+}
+
+function buildWebManifest(config, origin, entryFolder) {
   return {
     name: config.branding?.name ?? 'Brackets',
     short_name: config.branding?.name ?? 'Brackets',
@@ -569,7 +576,7 @@ function buildWebManifest(config, origin) {
     theme_color: config.branding?.accent ?? '#714cb6',
     icons: [
       {
-        src: '/framework/demo/favicon.svg',
+        src: entryAssetPath(entryFolder, 'favicon.svg'),
         sizes: 'any',
         type: 'image/svg+xml'
       }
@@ -1421,7 +1428,7 @@ function encodeStorageEnvelope(envelope, encode) {
   });
 }
 
-function decodeStorageEnvelope(rawValue, decode, filePath) {
+function decodeStorageEnvelope(rawValue, decode, filePath, minIterations) {
   const envelope = decode(rawValue);
   const version = Number(envelope?.version ?? 0);
   const cipher = String(envelope?.cipher ?? '');
@@ -1438,7 +1445,7 @@ function decodeStorageEnvelope(rawValue, decode, filePath) {
     || version !== 1
     || cipher !== 'aes-256-gcm'
     || kdf !== 'pbkdf2-sha256'
-    || iterations < 1
+    || iterations < minIterations
     || !salt
     || !iv
     || !tag
@@ -1475,8 +1482,8 @@ function encryptStorageValue(snapshot, encodeEnvelope, encodeValue, value) {
 }
 
 function decryptStorageValue(snapshot, decodeEnvelope, decodeValue, filePath, rawValue) {
-  const envelope = decodeStorageEnvelope(rawValue, decodeEnvelope, filePath);
   const cryptoConfig = storageCryptoConfig(snapshot);
+  const envelope = decodeStorageEnvelope(rawValue, decodeEnvelope, filePath, cryptoConfig.iterations);
 
   try {
     const key = deriveStorageKey(cryptoConfig.secret, envelope.salt, envelope.iterations);
@@ -2109,7 +2116,15 @@ function sendFrameworkError(res, error, fallbackRequestId = '') {
 
 function requireCsrf(req, expectedToken, requestId) {
   const provided = String(req.headers['x-brackets-csrf'] ?? '').trim();
-  if (!provided || provided !== String(expectedToken ?? '')) {
+  const expected = String(expectedToken ?? '');
+  if (!provided || !expected) {
+    throw createFrameworkError(403, 'BRACKETS_CSRF_MISMATCH', 'Brackets rejected this request because the session token did not match.', {
+      requestId
+    });
+  }
+  const providedBuffer = Buffer.from(provided, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
     throw createFrameworkError(403, 'BRACKETS_CSRF_MISMATCH', 'Brackets rejected this request because the session token did not match.', {
       requestId
     });
@@ -2261,12 +2276,65 @@ function storageRecordArgs(fallbackOrOptions = null, maybeOptions = {}) {
   };
 }
 
-async function shellHtml({ csrfToken = '', session = null, host = null, appConfig = null } = {}) {
-  const template = await readText(path.join(FRAMEWORK_DEMO_DIR, 'splash.html'));
-  return renderTemplate(template, {
+/** Inline shell for GET /{entry}/app/splash.html — rendered on demand, not stored on disk. */
+const DEMO_SHELL_HTML_TEMPLATE = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="{{THEME_COLOR}}" />
+  <title>{{TITLE}}</title>
+  <link rel="icon" href="{{FAVICON_PATH}}" type="image/svg+xml" />
+  <meta name="csrf" content="{{CSRF_TOKEN}}" />
+  <script type="application/json" id="session">{{SESSION_JSON}}</script>
+  <script type="application/json" id="host">{{HOST_JSON}}</script>
+  <script type="application/json" id="config">{{CONFIG_JSON}}</script>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: {{CANVAS}};
+      --ink: {{INK}};
+      --accent: {{ACCENT}};
+      --muted: {{MUTED}};
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      background: var(--canvas);
+      color: var(--ink);
+      display: grid;
+      place-content: center;
+      padding: 2rem;
+    }
+    .brx-shell {
+      max-width: 40rem;
+      text-align: center;
+    }
+    .brx-shell img { max-width: 12rem; height: auto; }
+    .brx-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="brx-shell">
+    <img src="{{LOGO_PATH}}" alt="{{NAME}}" />
+    <h1>{{BRANDING_TITLE}}</h1>
+    <p>{{TAGLINE}}</p>
+    <p><a href="/">Open the full demo (index.html + app)</a></p>
+    <div class="brx-chips">{{CHIPS_HTML}}</div>
+    <p style="margin-top:2rem;color:var(--muted);font-size:0.9rem;">Origin: {{ORIGIN}}</p>
+  </div>
+</body>
+</html>
+`;
+
+async function shellHtml({ csrfToken = '', session = null, host = null, appConfig = null, entryFolder = '.' } = {}) {
+  const faviconPath = entryAssetPath(entryFolder, 'favicon.svg');
+  const logoPath = entryAssetPath(entryFolder, 'logo.svg');
+  return renderTemplate(DEMO_SHELL_HTML_TEMPLATE, {
     TITLE: safeText(appConfig?.branding?.title ?? 'Brackets'),
     THEME_COLOR: safeText(appConfig?.branding?.accent ?? '#714cb6'),
-    FAVICON_PATH: '/framework/demo/favicon.svg',
+    FAVICON_PATH: faviconPath,
     CSRF_TOKEN: safeText(csrfToken),
     SESSION_JSON: scriptJson(session ?? { authenticated: false, user: null }),
     HOST_JSON: scriptJson(host ?? {}),
@@ -2278,7 +2346,7 @@ async function shellHtml({ csrfToken = '', session = null, host = null, appConfi
     ACCENT: safeText(appConfig?.branding?.accent ?? '#714cb6'),
     MUTED: safeText(appConfig?.branding?.muted ?? '#5b5361'),
     NAME: safeText(appConfig?.branding?.name ?? 'Brackets'),
-    LOGO_PATH: '/framework/demo/logo.svg',
+    LOGO_PATH: logoPath,
     BRANDING_TITLE: safeText(appConfig?.branding?.title ?? 'Give HTML superpowers.'),
     TAGLINE: safeText(appConfig?.branding?.tagline ?? 'No build step. HTML first. Datastar underneath.'),
     CHIPS_HTML: (appConfig?.splash?.chips ?? [])
@@ -2291,20 +2359,20 @@ async function shellHtml({ csrfToken = '', session = null, host = null, appConfi
 function hydratePackagedIndexHtml(source, { csrfToken = '', session = null, host = null, appConfig = null } = {}) {
   let html = source;
   html = html.replace(
-    /<meta name="brackets-csrf" content="[^"]*"\s*\/?>/i,
-    `<meta name="brackets-csrf" content="${safeText(csrfToken)}" />`
+    /<meta name="csrf" content="[^"]*"\s*\/?>/i,
+    `<meta name="csrf" content="${safeText(csrfToken)}" />`
   );
   html = html.replace(
-    /<script type="application\/json" id="brackets-session">[\s\S]*?<\/script>/i,
-    `<script type="application/json" id="brackets-session">${scriptJson(session ?? { authenticated: false, user: null })}</script>`
+    /<script type="application\/json" id="session">[\s\S]*?<\/script>/i,
+    `<script type="application/json" id="session">${scriptJson(session ?? { authenticated: false, user: null })}</script>`
   );
   html = html.replace(
-    /<script type="application\/json" id="brackets-host">[\s\S]*?<\/script>/i,
-    `<script type="application/json" id="brackets-host">${scriptJson(host ?? {})}</script>`
+    /<script type="application\/json" id="host">[\s\S]*?<\/script>/i,
+    `<script type="application/json" id="host">${scriptJson(host ?? {})}</script>`
   );
   html = html.replace(
-    /<script type="application\/json" id="brackets-config">[\s\S]*?<\/script>/i,
-    `<script type="application/json" id="brackets-config">${scriptJson(appConfig ?? {})}</script>`
+    /<script type="application\/json" id="config">[\s\S]*?<\/script>/i,
+    `<script type="application/json" id="config">${scriptJson(appConfig ?? {})}</script>`
   );
   html = html.replace(
     /<script type="importmap">[\s\S]*?<\/script>/i,
@@ -2421,22 +2489,27 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
         return;
       }
 
-      if (url.pathname === '/framework/demo/logo.svg' || url.pathname === '/framework/logo.svg') {
-        send(res, 200, 'image/svg+xml', await readText(path.join(FRAMEWORK_DEMO_DIR, 'logo.svg')));
+      const entryLogoPath = entryAssetPath(entryRoot.folder, 'logo.svg');
+      const entryFaviconPath = entryAssetPath(entryRoot.folder, 'favicon.svg');
+
+      if (url.pathname === entryLogoPath || url.pathname === '/framework/logo.svg') {
+        send(res, 200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'logo.svg')));
         return;
       }
 
-      if (url.pathname === '/framework/demo/favicon.svg' || url.pathname === '/framework/favicon.svg') {
-        send(res, 200, 'image/svg+xml', await readText(path.join(FRAMEWORK_DEMO_DIR, 'favicon.svg')));
+      if (url.pathname === entryFaviconPath || url.pathname === '/framework/favicon.svg') {
+        send(res, 200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'favicon.svg')));
         return;
       }
 
-      if (url.pathname === '/framework/demo/splash.html') {
+      const entrySplashPath = entryAssetPath(entryRoot.folder, 'splash.html');
+      if (url.pathname === entrySplashPath) {
         send(res, 200, 'text/html; charset=utf-8', await shellHtml({
           csrfToken,
           session,
           host: hostContract,
-          appConfig: config
+          appConfig: config,
+          entryFolder: entryRoot.folder
         }), {
           'Set-Cookie': cookieHeader
         });
@@ -2481,9 +2554,9 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
             api: appSnapshot.apiModules.map((module) => appModuleRecord('api', module))
           },
           assets: {
-            logo: '/framework/demo/logo.svg',
-            favicon: '/framework/demo/favicon.svg',
-            splash: '/framework/demo/splash.html'
+            logo: entryAssetPath(entryRoot.folder, 'logo.svg'),
+            favicon: entryAssetPath(entryRoot.folder, 'favicon.svg'),
+            splash: entryAssetPath(entryRoot.folder, 'splash.html')
           },
           importMap: buildImportMap(config.entry?.folder ?? '.'),
           host: hostContract
@@ -2502,7 +2575,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
       }
 
       if (url.pathname === '/manifest.webmanifest') {
-        sendJson(res, 200, buildWebManifest(config, origin));
+        sendJson(res, 200, buildWebManifest(config, origin, entryRoot.folder));
         return;
       }
 
@@ -2872,9 +2945,16 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
         return;
       }
 
+      let decodedPathname;
+      try {
+        decodedPathname = decodeURIComponent(url.pathname);
+      } catch {
+        send(res, 400, 'text/plain; charset=utf-8', 'Bad request');
+        return;
+      }
       const staticTarget = ensureWithinRoot(
         entryRoot.absolutePath,
-        path.join(entryRoot.absolutePath, decodeURIComponent(url.pathname).replace(/^\/+/, '')),
+        path.join(entryRoot.absolutePath, decodedPathname.replace(/^\/+/, '')),
         `static:${url.pathname}`
       );
       const extension = path.extname(staticTarget).toLowerCase();
