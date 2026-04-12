@@ -3132,12 +3132,12 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
 
       if (shouldServeShell(url.pathname) && existsSync(entryRoot.indexPath)) {
         const source = await readText(entryRoot.indexPath);
-        send(res, 200, 'text/html; charset=utf-8', hydratePackagedIndexHtml(source, {
+        send(res, 200, 'text/html; charset=utf-8', transformHtmlSyntax(hydratePackagedIndexHtml(source, {
           csrfToken,
           session,
           host: hostContract,
           appConfig: config
-        }), {
+        })), {
           'Set-Cookie': cookieHeader
         });
         return;

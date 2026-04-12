@@ -74,6 +74,13 @@ function setText(selector, value) {
   }
 }
 
+function setTextAll(selector, value) {
+  const text = String(value ?? '');
+  for (const element of document.querySelectorAll(selector)) {
+    element.textContent = text;
+  }
+}
+
 function setDataState(selector, value) {
   const element = document.querySelector(selector);
   if (element) {
@@ -177,14 +184,13 @@ function updateShellStatus(state, label) {
 }
 
 function renderHealth({ latency, host, result }) {
-  setDataState('[data-brx-health-light]', result.state);
   setDataState('[data-brx-health-meter]', result.state);
   setText('[data-brx-health-summary]', result.summary);
-  setText('[data-brx-health-latency]', `${latency}ms`);
-  setText('[data-brx-health-runtime]', hostSummary(host));
-  setText('[data-brx-health-mode]', modeSummary(host));
-  setText('[data-brx-local-origin]', host?.addresses?.localOrigin ?? host?.origin ?? window.location.origin);
-  setText('[data-brx-network-origin]', buildNetworkLabel(host));
+  setTextAll('[data-brx-health-latency]', `${latency}ms`);
+  setTextAll('[data-brx-health-runtime]', hostSummary(host));
+  setTextAll('[data-brx-health-mode]', modeSummary(host));
+  setTextAll('[data-brx-local-origin]', host?.addresses?.localOrigin ?? host?.origin ?? window.location.origin);
+  setTextAll('[data-brx-network-origin]', buildNetworkLabel(host));
   updateShellStatus(result.state, result.label);
   setHealthBar(result.score);
 
@@ -208,12 +214,11 @@ function renderFrameworkError(message) {
     score: 12
   };
 
-  setDataState('[data-brx-health-light]', result.state);
   setDataState('[data-brx-health-meter]', result.state);
   setText('[data-brx-health-summary]', result.summary);
-  setText('[data-brx-health-latency]', 'error');
-  setText('[data-brx-health-runtime]', 'unavailable');
-  setText('[data-brx-health-mode]', 'check host');
+  setTextAll('[data-brx-health-latency]', 'error');
+  setTextAll('[data-brx-health-runtime]', 'unavailable');
+  setTextAll('[data-brx-health-mode]', 'check host');
   updateShellStatus(result.state, result.label);
   setHealthBar(result.score);
 
@@ -3426,6 +3431,9 @@ function exposeRuntime(config, host) {
     refreshHealth() {
       return refreshHealth(config);
     },
+    callRpc(kind, moduleName, methodName, args = []) {
+      return rpc(kind, moduleName, methodName, args);
+    },
     async callAction(name, args = [], evt = null, el = null) {
       return callLogic(name, args, evt, el);
     },
@@ -3509,10 +3517,10 @@ async function bootstrap() {
   starterTitle = document.title;
 
   exposeRuntime(frameworkConfig, embeddedHost);
-  setText('[data-brx-local-origin]', embeddedHost?.addresses?.localOrigin ?? embeddedHost?.origin ?? window.location.origin);
-  setText('[data-brx-network-origin]', buildNetworkLabel(embeddedHost));
-  setText('[data-brx-health-runtime]', hostSummary(embeddedHost));
-  setText('[data-brx-health-mode]', modeSummary(embeddedHost));
+  setTextAll('[data-brx-local-origin]', embeddedHost?.addresses?.localOrigin ?? embeddedHost?.origin ?? window.location.origin);
+  setTextAll('[data-brx-network-origin]', buildNetworkLabel(embeddedHost));
+  setTextAll('[data-brx-health-runtime]', hostSummary(embeddedHost));
+  setTextAll('[data-brx-health-mode]', modeSummary(embeddedHost));
 
   interceptLinkClicks();
   observeFrameworkSignals();
@@ -3521,6 +3529,7 @@ async function bootstrap() {
   attachDevReloadStream(embeddedHost);
 
   if (currentShell === 'starter') {
+    await applyFrameworkDirectives(root);
     await refreshHealth(frameworkConfig);
   }
 
