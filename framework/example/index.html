@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <!--
+    Package entry — interacts with docs/index.md, docs/guide.md (Framework example package), framework/runtime.js
+
+    Basic document setup.
+
+    This file is only the app entry point.
+    Do not use it as a page template.
+    Do not place repeated layout, page, or component markup here.
+  -->
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+  <!--
+    Shared entry assets.
+
+    These are global app assets loaded at startup.
+    Keep page-specific metadata out of this file.
+  -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/app/styles.css" />
+
+  <!--
+    Runtime / bootstrap values.
+
+    csrf:
+      Standard CSRF token hook. Leave empty unless the host or backend
+      provides a token.
+
+    session:
+      Initial session / auth snapshot.
+
+    host:
+      Host capabilities, environment info, adapter flags, URLs, etc.
+
+    config:
+      Client-safe config mirrored from config.yaml or host startup.
+  -->
+  <meta name="csrf" content="" />
+  <script type="application/json" id="session">{}</script>
+  <script type="application/json" id="host">{}</script>
+  <script type="application/json" id="config">{}</script>
+
+  <!--
+    Import map support check.
+
+    Import maps are used for browser-side module aliases.
+    If support is missing, log a warning so the issue is easy to spot.
+  -->
+  <script>
+    if (!HTMLScriptElement.supports?.("importmap")) {
+      console.warn("This browser does not support import maps.");
+    }
+  </script>
+
+  <!--
+    Import map.
+
+    @framework/:
+      Alias for framework files.
+
+    @app/:
+      Alias for app files.
+
+    brackets:
+      Alias for the main Brackets runtime entry.
+
+    Example usage inside browser modules:
+      import "brackets"
+      import "@framework/router.js"
+      import "@app/logic/home.js"
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@framework/": "/framework/",
+      "@app/": "/app/",
+      "brackets": "/framework/runtime.js"
+    }
+  }
+  </script>
+
+  <!--
+    Brackets runtime entry.
+
+    Load the runtime by alias so the import map is actually being used.
+    This should boot the runtime and render the active view into #app-root.
+  -->
+  <script type="module">
+    import "brackets";
+  </script>
+</head>
+<body>
+  <!--
+    Minimal fallback for users with JavaScript disabled.
+  -->
+  <noscript>This app requires JavaScript to run.</noscript>
+
+  <!--
+    Root host area.
+
+    The runtime should own this region.
+    Do not place repeated layout HTML here.
+  -->
+  <main id="app-root"></main>
+</body>
+</html>
