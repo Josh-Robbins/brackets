@@ -86,6 +86,11 @@
                   <code>index.html</code> is the <strong>package entry only</strong> (import map, runtime, <code>#app-root</code>) — not
                   where normal page markup lives. Build routes and templates under <code>app/</code>.
                 </li>
+                <li>
+                  <strong>Windows (CMD):</strong> <code>cd</code> into the package, then run
+                  <code>framework\host\windows-x64\deno.exe run --allow-read --allow-write --allow-net --allow-run --allow-env cli.js</code>.
+                  Use <code>run app</code> or <code>run app dev</code> (dev mode: live updates for the SPA; see the <a href="./guide.html">Guide</a>).
+                </li>
                 <li>Run <code>config show</code> and <code>info</code>.</li>
                 <li>Run <code>health</code> and <code>test app</code>.</li>
                 <li>Read the guide and start from one page, one template, and one behavior file.</li>

@@ -48,6 +48,13 @@ engine: deno
 host: 127.0.0.1
 port: 4173
 
+# Live file watching for the built-in host (optional).
+# When enabled with reload, the host pushes the same dev stream as `run app dev`
+# so the browser can refresh in place (SPA) or fully reload for bootstrap files.
+watch:
+  enabled: false
+  reload: false
+
 entry:
   # Folder (under this package) the host treats as the entry root.
   # The host serves that folder's index.html for `/` and resolves static files from it.

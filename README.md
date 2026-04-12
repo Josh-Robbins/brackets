@@ -202,10 +202,21 @@ Inside the root CLI:
 - `info` shows the package root, engine path, runtime mode, and entry file
 - `config show` shows the live root config
 - `run app` starts the built-in Deno host in embedded mode
-- `run app dev` starts the built-in host in dev mode
+- `run app dev` starts the built-in host in **dev mode** (file watcher + dev SSE: in-place SPA refresh for app files, full reload when root `index.html`, root config, or core `framework/*.js` changes)
 - `status server` shows the current local and network origins
 - `health` probes the running host
 - `test app` runs the bundled Deno framework test suite against the current package
+
+### Windows (CMD)
+
+From the unzipped package folder, use the bundled engine (adjust the path if you use another host platform folder):
+
+```bat
+cd path\to\Brackets
+framework\host\windows-x64\deno.exe run --allow-read --allow-write --allow-net --allow-run --allow-env cli.js
+```
+
+Then use the interactive prompt (for example `run app dev`) or pass the same tokens as CLI arguments.
 
 External mode stays honest too:
 

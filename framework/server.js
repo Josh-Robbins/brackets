@@ -1,7 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import vm from 'node:vm';
-import { existsSync } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import crypto from 'node:crypto';
@@ -120,6 +120,10 @@ const DEFAULT_BRACKETS_CONFIG = Object.freeze({
   },
   external: {
     origin: ''
+  },
+  watch: {
+    enabled: false,
+    reload: false
   }
 });
 
@@ -319,6 +323,7 @@ function normalizeBracketsConfig(rawConfig = {}) {
   const rawStorage = rawSecurity.storage && typeof rawSecurity.storage === 'object' ? rawSecurity.storage : {};
   const rawHealth = raw.health && typeof raw.health === 'object' ? raw.health : {};
   const rawExternal = raw.external && typeof raw.external === 'object' ? raw.external : {};
+  const rawWatch = raw.watch && typeof raw.watch === 'object' ? raw.watch : {};
 
   const runtime = String(raw.runtime ?? rawServer.runtime ?? defaults.runtime).trim() || defaults.runtime;
   const mode = String(raw.mode ?? rawServer.mode ?? defaults.mode).trim() || defaults.mode;
@@ -366,6 +371,10 @@ function normalizeBracketsConfig(rawConfig = {}) {
     },
     external: {
       origin: String(rawExternal.origin ?? '').trim()
+    },
+    watch: {
+      enabled: rawWatch.enabled === true,
+      reload: rawWatch.reload === true
     }
   };
 
@@ -1796,7 +1805,37 @@ async function invokeModuleMethod(snapshot, kind, moduleDescriptor, methodName, 
   return normalizeModuleResponse(result);
 }
 
-function buildHostContract(packageRoot, origin, config, addresses, appSnapshot) {
+function classifyDevFileChange(packageRoot, absPath) {
+  const root = path.resolve(packageRoot);
+  const resolved = path.resolve(absPath);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+    return null;
+  }
+  const rel = path.relative(root, resolved).split(path.sep).join('/');
+  if (!rel || rel === '.') {
+    return 'spa';
+  }
+  if (rel === 'index.html') {
+    return 'fullReload';
+  }
+  if (rel === 'config.yaml' || rel === 'config.yml' || rel === 'config.json') {
+    return 'fullReload';
+  }
+  if (rel === 'config/brackets.yaml' || rel === 'config/brackets.yml' || rel === 'config/brackets.json') {
+    return 'fullReload';
+  }
+  if (
+    rel === 'framework/runtime.js'
+    || rel === 'framework/datastar.js'
+    || rel === 'framework/syntax.js'
+    || rel === 'framework/version.js'
+  ) {
+    return 'fullReload';
+  }
+  return 'spa';
+}
+
+function buildHostContract(packageRoot, origin, config, addresses, appSnapshot, devReload = false) {
   const versions = buildVersionSnapshot();
   const currentEntryFolder = config.entry?.folder ?? '.';
   return {
@@ -1805,6 +1844,7 @@ function buildHostContract(packageRoot, origin, config, addresses, appSnapshot) 
     runtime: config.runtime,
     mode: config.mode,
     engine: config.engine,
+    devReload: Boolean(devReload),
     origin,
     addresses,
     profiles: ['starter', 'same-origin', 'portable-folder'],
@@ -2381,7 +2421,7 @@ function hydratePackagedIndexHtml(source, { csrfToken = '', session = null, host
   return html;
 }
 
-export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) {
+export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode: devModeOption = false } = {}) {
   const resolvedAppRoot = path.resolve(appRoot);
   const packageRoot = path.basename(resolvedAppRoot).toLowerCase() === 'app'
     ? path.dirname(resolvedAppRoot)
@@ -2389,6 +2429,8 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
   const readmePath = path.join(packageRoot, 'README.md');
   const robotsPath = path.join(packageRoot, 'robots.txt');
   const { config } = await loadBracketsConfig(packageRoot);
+  const liveReload = Boolean(devModeOption)
+    || (config.watch?.enabled === true && config.watch?.reload === true);
   const entryRoot = resolveEntryFolder(packageRoot, config);
 
   if (!existsSync(entryRoot.indexPath)) {
@@ -2402,13 +2444,60 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
   let addresses = networkOriginsForHost(protocol, resolvedHost, resolvedPort);
   let origin = addresses.preferredOrigin;
   let snapshot = await discoverBracketsApp(packageRoot, entryRoot, config);
-  let hostContract = buildHostContract(packageRoot, origin, config, addresses, snapshot);
+  let hostContract = buildHostContract(packageRoot, origin, config, addresses, snapshot, liveReload);
   const sessionBase = { authenticated: false, user: null };
   let snapshotCache = snapshot;
   let snapshotCacheAt = Date.now();
   let snapshotRefreshPromise = null;
   const sockets = new Set();
   const liveSubscribers = new Map();
+  const devSseClients = new Set();
+  const devWatchers = [];
+  let devDebounceTimer = null;
+  let pendingDevFullReload = false;
+
+  function broadcastDevSseEvent(eventName, data = {}) {
+    const line = `event: ${eventName}\ndata: ${JSON.stringify(data ?? {})}\n\n`;
+    for (const client of devSseClients) {
+      try {
+        client.write(line);
+      } catch {
+        devSseClients.delete(client);
+      }
+    }
+  }
+
+  function scheduleDevRediscover(changedPath) {
+    if (changedPath) {
+      const kind = classifyDevFileChange(packageRoot, changedPath);
+      if (kind === null) {
+        return;
+      }
+      if (kind === 'fullReload') {
+        pendingDevFullReload = true;
+      }
+    }
+    if (devDebounceTimer) {
+      clearTimeout(devDebounceTimer);
+    }
+    devDebounceTimer = setTimeout(async () => {
+      devDebounceTimer = null;
+      const useFullReload = pendingDevFullReload;
+      pendingDevFullReload = false;
+      ROUTE_MARKUP_CACHE.clear();
+      TEMPLATE_MARKUP_CACHE.clear();
+      try {
+        const next = await discoverBracketsApp(packageRoot, entryRoot, config);
+        snapshot = next;
+        snapshotCache = next;
+        snapshotCacheAt = Date.now();
+        hostContract = buildHostContract(packageRoot, origin, config, addresses, snapshot, liveReload);
+      } catch (error) {
+        console.error('[Brackets dev watch]', error);
+      }
+      broadcastDevSseEvent(useFullReload ? 'fullReload' : 'spa', {});
+    }, 200);
+  }
 
   async function getSnapshot() {
     if (Date.now() - snapshotCacheAt < 200) {
@@ -2457,12 +2546,35 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
     const requestId = crypto.randomBytes(8).toString('hex');
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+
+      if (url.pathname === '/__brackets/dev-reload') {
+        if (!liveReload) {
+          send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+          return;
+        }
+        if (req.method !== 'GET') {
+          send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive'
+        });
+        res.write(': dev\n\n');
+        devSseClients.add(res);
+        req.on('close', () => {
+          devSseClients.delete(res);
+        });
+        return;
+      }
+
       const cookies = parseCookies(req.headers.cookie ?? '');
       const csrfToken = resolveCsrfCookie(cookies) ?? crypto.randomBytes(16).toString('hex');
       const session = { ...sessionBase, csrfToken };
       const cookieHeader = buildCsrfCookie(req, csrfToken);
       const appSnapshot = await getSnapshot();
-      hostContract = buildHostContract(packageRoot, origin, config, addresses, appSnapshot);
+      hostContract = buildHostContract(packageRoot, origin, config, addresses, appSnapshot, liveReload);
 
       if (url.pathname === '/framework/runtime.js') {
         send(res, 200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_RUNTIME_PATH));
@@ -3010,13 +3122,61 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host } = {}) 
   addresses = networkOriginsForHost(protocol, resolvedHost, actualPort);
   origin = addresses.preferredOrigin;
   snapshot = await discoverBracketsApp(packageRoot, entryRoot, config);
-  hostContract = buildHostContract(packageRoot, origin, config, addresses, snapshot);
+  hostContract = buildHostContract(packageRoot, origin, config, addresses, snapshot, liveReload);
+
+  if (liveReload) {
+    const onFsEvent = (_event, fname) => {
+      const target = fname
+        ? path.resolve(packageRoot, fname)
+        : packageRoot;
+      scheduleDevRediscover(target);
+    };
+    try {
+      devWatchers.push(watch(packageRoot, { recursive: true }, onFsEvent));
+    } catch {
+      const fallbackDirs = [
+        packageRoot,
+        path.join(packageRoot, config.app),
+        entryRoot.absolutePath
+      ];
+      for (const dir of fallbackDirs) {
+        if (!existsSync(dir)) {
+          continue;
+        }
+        try {
+          devWatchers.push(watch(dir, onFsEvent));
+        } catch {
+          // Ignore directories the host cannot watch on this platform.
+        }
+      }
+    }
+  }
 
   return {
     server,
     url: origin,
     host: hostContract,
     async close() {
+      if (devDebounceTimer) {
+        clearTimeout(devDebounceTimer);
+        devDebounceTimer = null;
+      }
+      for (const w of devWatchers) {
+        try {
+          w.close();
+        } catch {
+          // Ignore close errors from platform watchers.
+        }
+      }
+      devWatchers.length = 0;
+      for (const client of devSseClients) {
+        try {
+          client.end();
+        } catch {
+          // Ignore half-open SSE clients.
+        }
+      }
+      devSseClients.clear();
       await new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
         for (const socket of sockets) {

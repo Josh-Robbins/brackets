@@ -51,6 +51,8 @@ The root CLI currently supports:
 - `health`
 - `test app`
 
+**Dev stream:** `run app dev` enables the built-in watcher and a dev-only SSE endpoint (`/__brackets/dev-reload`). The browser runtime reconnects when `host.devReload` is true: **edits under `app/`** (and most package files) trigger an **in-place SPA refresh** (current route re-fetched and morphed); changes to **package root `index.html`**, **root config** (`config.yaml` / `config.yml` / `config.json` or `config/brackets.*`), or **core `framework/runtime.js`**, **`framework/datastar.js`**, **`framework/syntax.js`**, **`framework/version.js`** trigger a **full page reload**. You can get the same stream on `run app` by setting `watch.enabled: true` and `watch.reload: true` in `config.yaml` (see [README workflow](../README.md) and [Guide: SPA development](./guide.md#spa-development-run-app-dev)).
+
 ## 3. Auth/Session/Security Contract
 
 Brackets supports:

@@ -256,6 +256,10 @@ function printConfig(config) {
     engine: config.engine ?? 'deno',
     host: config.host ?? '127.0.0.1',
     port: config.port ?? 4173,
+    watch: {
+      enabled: config.watch?.enabled === true,
+      reload: config.watch?.reload === true
+    },
     external: {
       origin: externalOrigin(config)
     },
@@ -293,7 +297,8 @@ async function startServer(mode = 'dynamic') {
     instance = await createServer({
       appRoot: PACKAGE_ROOT,
       host: config.host ?? '127.0.0.1',
-      port: Number(config.port ?? 4173)
+      port: Number(config.port ?? 4173),
+      devMode: mode === 'dev'
     });
   } catch (error) {
     if (String(error?.message ?? '').includes('AddrInUse')) {

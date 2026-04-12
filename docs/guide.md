@@ -477,6 +477,15 @@ That keeps router code easier to maintain:
 - query and hash stay structured
 - links, redirects, and prefetch can share the same target shape
 
+### SPA development (`run app dev`)
+
+Use the root CLI **`run app dev`** (or **`watch.enabled` + `watch.reload`** in `config.yaml` with **`run app`**) while you edit files. The built-in host watches the package tree and exposes **`/__brackets/dev-reload`**; when `host.devReload` is true, the runtime subscribes and:
+
+- **In-place SPA update:** for typical edits (routes under `app/`, `.html`, `.view`, `.logic`, `.data`, `.api`, static assets, and so on), the current URL stays the same and Brackets **re-fetches the route** and reapplies markup—no full document load.
+- **Full page reload:** required when you change the **package entry shell** (**root `index.html`**), **root or `config/` Brackets config files**, or the shipped **framework bundles** (`framework/runtime.js`, `framework/datastar.js`, `framework/syntax.js`, `framework/version.js`) so import maps, injected `host`/`config` JSON, and the runtime stay consistent.
+
+On **Windows**, start the CLI with the bundled Deno binary as shown in the [README workflow](../README.md). See [Platform: root CLI](./platform.md) for the command list.
+
 ### Website
 
 Use:

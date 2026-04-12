@@ -3436,6 +3436,70 @@ function exposeRuntime(config, host) {
   };
 }
 
+let devSseCoalesceTimer = null;
+let devSsePendingFullReload = false;
+
+function invalidateDevClientCaches() {
+  for (const cacheKey of [...frameworkCache.keys()]) {
+    bumpCacheGeneration(frameworkCacheGenerations, cacheKey);
+  }
+  for (const cacheKey of [...routeRenderCache.keys()]) {
+    bumpCacheGeneration(routeCacheGenerations, cacheKey);
+  }
+  frameworkCache.clear();
+  routeRenderCache.clear();
+  frameworkTemplateCache.clear();
+  appContractPromise = null;
+  resolvedAppContract = null;
+  routePreloadsStarted = false;
+}
+
+async function runDevSpaRefresh() {
+  invalidateDevClientCaches();
+  const currentPath = normalizePath(window.location.pathname);
+  if (currentShell === 'app') {
+    await renderRoute(currentPath, {
+      force: true,
+      replace: true,
+      navigationToken: navigationSequence
+    }).catch(() => null);
+  } else {
+    void refreshHealth(frameworkConfig);
+  }
+}
+
+function scheduleDevSseAction(kind) {
+  if (kind === 'fullReload') {
+    devSsePendingFullReload = true;
+  }
+  if (devSseCoalesceTimer) {
+    clearTimeout(devSseCoalesceTimer);
+  }
+  devSseCoalesceTimer = window.setTimeout(() => {
+    devSseCoalesceTimer = null;
+    const full = devSsePendingFullReload;
+    devSsePendingFullReload = false;
+    if (full) {
+      window.location.reload();
+    } else {
+      void runDevSpaRefresh();
+    }
+  }, 120);
+}
+
+function attachDevReloadStream(host) {
+  if (!host?.devReload || typeof EventSource !== 'function') {
+    return;
+  }
+  const source = new EventSource('/__brackets/dev-reload');
+  source.addEventListener('spa', () => {
+    scheduleDevSseAction('spa');
+  });
+  source.addEventListener('fullReload', () => {
+    scheduleDevSseAction('fullReload');
+  });
+}
+
 async function bootstrap() {
   frameworkConfig = readJsonScript('config', {});
   embeddedHost = readJsonScript('host', {});
@@ -3454,6 +3518,7 @@ async function bootstrap() {
   observeFrameworkSignals();
   observeFrameworkDom();
   await applyEntryBehavior(frameworkConfig);
+  attachDevReloadStream(embeddedHost);
 
   if (currentShell === 'starter') {
     await refreshHealth(frameworkConfig);

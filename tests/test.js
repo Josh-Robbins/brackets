@@ -90,6 +90,30 @@ async function withServer(appRoot, run) {
   }
 }
 
+async function withDevServer(appRoot, run) {
+  const instance = await createServer({
+    appRoot,
+    host: '127.0.0.1',
+    port: 0,
+    devMode: true
+  });
+
+  try {
+    await run(instance);
+  } finally {
+    await instance.close();
+  }
+}
+
+async function readNextDevSseEvent(reader, decoder = new TextDecoder()) {
+  while (true) {
+    const ev = await readSseEvent(reader, decoder);
+    if (ev.event === 'spa' || ev.event === 'fullReload') {
+      return ev;
+    }
+  }
+}
+
 async function writeText(filePath, source) {
   await Deno.mkdir(path.dirname(filePath), { recursive: true });
   await Deno.writeTextFile(filePath, source);
@@ -1023,6 +1047,137 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
 
       const serverSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'server.js'));
       assert(serverSource.includes('auth.forbidden ?? auth.unauthorized'), 'server should prefer forbidden redirect targets before unauthorized fallbacks for role mismatches');
+    });
+  } finally {
+    await Deno.remove(tempRoot, { recursive: true });
+  }
+});
+
+Deno.test('dev reload SSE is enabled when watch.enabled and watch.reload are true', async () => {
+  const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-watch-' });
+
+  try {
+    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 0,
+      entry: {
+        folder: '.',
+        route: '/',
+        autoStart: false
+      },
+      watch: {
+        enabled: true,
+        reload: true
+      }
+    }, null, 2));
+
+    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-watch</body></html>');
+
+    await withServer(tempRoot, async ({ url }) => {
+      const response = await fetch(`${url}/__brackets/dev-reload`);
+      assertEqual(response.status, 200, 'dev SSE should be on when watch.reload is set');
+      await response.body?.cancel?.();
+    });
+  } finally {
+    await Deno.remove(tempRoot, { recursive: true });
+  }
+});
+
+Deno.test('dev reload SSE is disabled without devMode or watch.reload', async () => {
+  const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-off-' });
+
+  try {
+    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 0,
+      entry: {
+        folder: '.',
+        route: '/',
+        autoStart: false
+      },
+      watch: {
+        enabled: false,
+        reload: false
+      }
+    }, null, 2));
+
+    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-off</body></html>');
+
+    await withServer(tempRoot, async ({ url }) => {
+      const response = await fetch(`${url}/__brackets/dev-reload`);
+      assertEqual(response.status, 404, 'dev SSE should be disabled without devMode or watch.reload');
+      await response.arrayBuffer();
+    });
+  } finally {
+    await Deno.remove(tempRoot, { recursive: true });
+  }
+});
+
+Deno.test('dev reload SSE emits spa and fullReload when package files change', async () => {
+  const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-on-' });
+
+  try {
+    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 0,
+      entry: {
+        folder: '.',
+        route: '/',
+        autoStart: false
+      }
+    }, null, 2));
+
+    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on</body></html>');
+
+    await withDevServer(tempRoot, async ({ url }) => {
+      const hostResponse = await fetch(`${url}/__brackets/host`);
+      const host = await hostResponse.json();
+      assert(host.devReload === true, 'host contract should advertise devReload in dev mode');
+
+      const denied = await fetch(`${url}/__brackets/dev-reload`, { method: 'POST' });
+      assertEqual(denied.status, 405, 'dev SSE should reject non-GET');
+      await denied.arrayBuffer();
+
+      const response = await fetch(`${url}/__brackets/dev-reload`);
+      assertEqual(response.status, 200, 'dev SSE should be available in devMode');
+      assertEqual(response.headers.get('content-type'), 'text/event-stream; charset=utf-8', 'dev endpoint should be SSE');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      const raceWithTimeout = (promise, ms, label) => {
+        let timer = null;
+        return Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), ms);
+          })
+        ]).finally(() => {
+          if (timer !== null) {
+            clearTimeout(timer);
+          }
+        });
+      };
+
+      try {
+        await writeText(path.join(tempRoot, 'app', 'dev-probe.txt'), 'probe');
+        const spaEvent = await raceWithTimeout(
+          readNextDevSseEvent(reader, decoder),
+          4000,
+          'spa dev event'
+        );
+        assertEqual(spaEvent.event, 'spa', 'app tree changes should emit spa');
+
+        await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on-2</body></html>');
+        const fullEvent = await raceWithTimeout(
+          readNextDevSseEvent(reader, decoder),
+          4000,
+          'fullReload dev event'
+        );
+        assertEqual(fullEvent.event, 'fullReload', 'package index changes should emit fullReload');
+      } finally {
+        await reader.cancel();
+      }
     });
   } finally {
     await Deno.remove(tempRoot, { recursive: true });
