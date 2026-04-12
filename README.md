@@ -229,7 +229,7 @@ External mode stays honest too:
 
 The built-in verification path is `test app` from the root CLI.
 
-The package test file is still [`tests/test.js`](./tests/test.js), and `test app` runs it through the bundled Deno host instead of a separate Node test path.
+The package test file is still [`tests/test.js`](./tests/test.js), and `test app` runs it through the bundled Deno host instead of a separate Node test path. The test suite itself uses **Deno APIs and `jsr:@std/path`** only—it does not import `node:*` modules, so you are not depending on Node.js to run tests (the built-in host still uses Deno’s Node-compat layer internally for `framework/server.js`).
 
 ## Distribution
 

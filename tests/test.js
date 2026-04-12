@@ -1,9 +1,9 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Uses Deno + @std/path only (no node: imports). Interacts with: ../framework/server.js, ../framework/syntax.js
+import { dirname, join, resolve } from 'jsr:@std/path@1';
 import { createServer } from '../framework/server.js';
 import { transformHtmlSyntax } from '../framework/syntax.js';
 
-const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const repoRoot = resolve(import.meta.dirname, '..');
 
 function assert(condition, message) {
   if (!condition) {
@@ -115,7 +115,7 @@ async function readNextDevSseEvent(reader, decoder = new TextDecoder()) {
 }
 
 async function writeText(filePath, source) {
-  await Deno.mkdir(path.dirname(filePath), { recursive: true });
+  await Deno.mkdir(dirname(filePath), { recursive: true });
   await Deno.writeTextFile(filePath, source);
 }
 
@@ -178,7 +178,7 @@ Deno.test('framework syntax compiler maps the documented Brackets language to Da
 });
 
 Deno.test('framework action helpers follow the documented control, form, and file behavior', async () => {
-  const runtimeSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'runtime.js'));
+  const runtimeSource = await Deno.readTextFile(join(repoRoot, 'framework', 'runtime.js'));
   const start = runtimeSource.indexOf('function resolveActionElement');
   const end = runtimeSource.indexOf('function currentRouteState');
   assert(start !== -1 && end !== -1 && end > start, 'runtime should keep the action helper block in a readable function section');
@@ -317,7 +317,7 @@ Deno.test('framework serves the root entry from config.yaml and exposes the docs
     assert(runtimeSource.includes('SESSION_CACHE_TTL_MS = 5000'), 'runtime should bound cached session reuse with a short TTL');
     assert(runtimeSource.includes("credentials: 'same-origin'"), 'runtime transport should stay on same-origin credentials for host/session requests');
 
-      const serverSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'server.js'));
+      const serverSource = await Deno.readTextFile(join(repoRoot, 'framework', 'server.js'));
       assert(serverSource.includes('__Host-brackets_csrf'), 'server should support secure host-prefixed CSRF cookies on HTTPS hosts');
       assert(serverSource.includes('function routeAuthStatus'), 'server should compute auth status explicitly instead of inferring it ad hoc');
       assert(serverSource.includes('function methodLooksMutating'), 'server should distinguish reads from writes before invalidating route/cache state');
@@ -328,7 +328,7 @@ Deno.test('framework honors entry.folder and serves that folder index.html first
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-entry-folder-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -338,7 +338,7 @@ Deno.test('framework honors entry.folder and serves that folder index.html first
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'site', 'index.html'), '<!doctype html><html><body><h1>Entry folder works</h1></body></html>');
+    await writeText(join(tempRoot, 'site', 'index.html'), '<!doctype html><html><body><h1>Entry folder works</h1></body></html>');
 
     await withServer(tempRoot, async ({ url }) => {
       const root = await fetch(url);
@@ -360,7 +360,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-app-contract-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -370,8 +370,8 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), await Deno.readTextFile(path.join(repoRoot, 'index.html')));
-    await writeText(path.join(tempRoot, 'app', 'views', 'home.view'), [
+    await writeText(join(tempRoot, 'index.html'), await Deno.readTextFile(join(repoRoot, 'index.html')));
+    await writeText(join(tempRoot, 'app', 'views', 'home.view'), [
       'page({',
       "  id: 'home',",
       "  route: '/home',",
@@ -386,7 +386,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       "  assets: { scripts: ['/static/home.js'] }",
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'views', 'details.view'), [
+    await writeText(join(tempRoot, 'app', 'views', 'details.view'), [
       'page({',
       "  id: 'details',",
       "  route: '/details',",
@@ -395,20 +395,20 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       "  seo: { sitemap: false }",
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'layouts', 'app.html'), [
+    await writeText(join(tempRoot, 'app', 'layouts', 'app.html'), [
       '<section class="shell">',
       '  <header :area="\'hero\'"><h2>Default hero</h2></header>',
       '  <header>Shell</header>',
       '  <main :mount></main>',
       '</section>'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'components', 'card.html'), [
+    await writeText(join(tempRoot, 'app', 'components', 'card.html'), [
       '<article class="card">',
       '  <h2 :text="title"></h2>',
       '  <div :area="\'body\'">Default body</div>',
       '</article>'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'pages', 'home.html'), [
+    await writeText(join(tempRoot, 'app', 'pages', 'home.html'), [
       '<main [page] :state="{ title: \'Framework route\', items: [{ name: \'Ada\' }, { name: \'Grace\' }], visible: true, htmlBlock: \'<strong>Trusted</strong>\' }">',
       '  <template :fill="\'hero\'"><p :text="title"></p></template>',
       '  <h1 :text="title"></h1>',
@@ -428,20 +428,20 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       '  <section :calc="{ feed: read(\'/events.state\') }"></section>',
       '</main>'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'logic', 'home.logic'), [
+    await writeText(join(tempRoot, 'app', 'logic', 'home.logic'), [
       '({',
       '  mount() {',
       '    return null;',
       '  }',
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'pages', 'details.html'), [
+    await writeText(join(tempRoot, 'app', 'pages', 'details.html'), [
       '<main [page] :state="{ title: \'Details route\', visible: true }">',
       '  <template :fill="\'hero\'"><p :text="title"></p></template>',
       '  <h1 :text="title"></h1>',
       '</main>'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'data', 'contacts.data'), [
+    await writeText(join(tempRoot, 'app', 'data', 'contacts.data'), [
       '({',
       '  list() {',
       "    return [{ id: 1, name: 'Ada' }];",
@@ -451,7 +451,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       '  }',
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'api', 'remote.api'), [
+    await writeText(join(tempRoot, 'app', 'api', 'remote.api'), [
       '({',
       '  ping() {',
       "    return { ok: true, transport: 'same-origin' };",
@@ -703,7 +703,7 @@ Deno.test('framework encrypted storage works for real through .data modules', as
   process.env.BRACKETS_DATA_KEY = 'brackets-test-storage-key';
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -719,8 +719,8 @@ Deno.test('framework encrypted storage works for real through .data modules', as
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>secure</body></html>');
-    await writeText(path.join(tempRoot, 'app', 'data', 'profile.data'), [
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>secure</body></html>');
+    await writeText(join(tempRoot, 'app', 'data', 'profile.data'), [
       '({',
       '  async save({ storage }, nextValue) {',
       "    return storage['[e]json']('@storage/profile.secure.json').write(nextValue);",
@@ -751,7 +751,7 @@ Deno.test('framework encrypted storage works for real through .data modules', as
       assertEqual(writeResponse.status, 200, 'encrypted storage write RPC should succeed');
       await writeResponse.arrayBuffer();
 
-      const rawStorage = await Deno.readTextFile(path.join(tempRoot, 'app', 'storage', 'profile.secure.json'));
+      const rawStorage = await Deno.readTextFile(join(tempRoot, 'app', 'storage', 'profile.secure.json'));
       assert(!rawStorage.includes('secret-value'), 'encrypted storage should not write plaintext values to disk');
       assert(rawStorage.includes('"cipher": "aes-256-gcm"'), 'encrypted storage should write an authenticated encryption envelope');
 
@@ -788,7 +788,7 @@ Deno.test('framework .db storage works for real through .data modules', async ()
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-db-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -798,8 +798,8 @@ Deno.test('framework .db storage works for real through .data modules', async ()
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>db</body></html>');
-    await writeText(path.join(tempRoot, 'app', 'data', 'prefs.data'), [
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>db</body></html>');
+    await writeText(join(tempRoot, 'app', 'data', 'prefs.data'), [
       '({',
       '  async save({ db }, nextValue) {',
       "    return db('@storage/prefs.db').write(nextValue);",
@@ -858,7 +858,7 @@ Deno.test('framework live SSE can stream .data changes from flat-file storage', 
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-live-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -868,8 +868,8 @@ Deno.test('framework live SSE can stream .data changes from flat-file storage', 
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>live</body></html>');
-    await writeText(path.join(tempRoot, 'app', 'data', 'contacts.data'), [
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>live</body></html>');
+    await writeText(join(tempRoot, 'app', 'data', 'contacts.data'), [
       '({',
       '  async list({ json }) {',
       "    return json('@storage/contacts.json').read([]);",
@@ -879,7 +879,7 @@ Deno.test('framework live SSE can stream .data changes from flat-file storage', 
       '  }',
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'storage', 'contacts.json'), JSON.stringify([{ id: 1, name: 'Ada' }], null, 2));
+    await writeText(join(tempRoot, 'app', 'storage', 'contacts.json'), JSON.stringify([{ id: 1, name: 'Ada' }], null, 2));
 
     await withServer(tempRoot, async ({ url }) => {
       const sessionSecurity = await getSessionSecurity(url);
@@ -941,7 +941,7 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-router-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -951,8 +951,8 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body><div id="brackets-root"></div></body></html>');
-    await writeText(path.join(tempRoot, 'app', 'router.logic'), [
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body><div id="brackets-root"></div></body></html>');
+    await writeText(join(tempRoot, 'app', 'router.logic'), [
       '({',
       '  routes: [',
       '    {',
@@ -993,7 +993,7 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
       "  notFound() { return '/login'; }",
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'routes', 'reports.logic'), [
+    await writeText(join(tempRoot, 'app', 'routes', 'reports.logic'), [
       '({',
       '  routes: [',
       '    {',
@@ -1004,18 +1004,18 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
       '  ]',
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'views', 'home.view'), [
+    await writeText(join(tempRoot, 'app', 'views', 'home.view'), [
       'page({',
       "  id: 'home-view',",
       "  route: '/home',",
       "  html: '@app/pages/view-home.html'",
       '})'
     ].join('\n'));
-    await writeText(path.join(tempRoot, 'app', 'pages', 'router-home.html'), '<main><h1>Router logic home</h1></main>');
-    await writeText(path.join(tempRoot, 'app', 'pages', 'view-home.html'), '<main><h1>View home</h1></main>');
-    await writeText(path.join(tempRoot, 'app', 'pages', 'reports.html'), '<main><h1>Grouped reports</h1></main>');
-    await writeText(path.join(tempRoot, 'app', 'pages', 'forbidden.html'), '<main><h1>Forbidden page</h1></main>');
-    await writeText(path.join(tempRoot, 'app', 'pages', 'login.html'), '<main><h1>Login page</h1></main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'router-home.html'), '<main><h1>Router logic home</h1></main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'view-home.html'), '<main><h1>View home</h1></main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'reports.html'), '<main><h1>Grouped reports</h1></main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'forbidden.html'), '<main><h1>Forbidden page</h1></main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'login.html'), '<main><h1>Login page</h1></main>');
 
     await withServer(tempRoot, async ({ url }) => {
       const appContract = await fetch(`${url}/.well-known/brackets-app.json`).then((response) => response.json());
@@ -1045,7 +1045,7 @@ Deno.test('framework hybrid router gives router.logic and grouped logic routes p
       assert(runtimeSource.includes("callRouterHook('beforeEach'"), 'runtime should call router beforeEach hooks');
       assert(runtimeSource.includes("callRouterHook('notFound'"), 'runtime should call router notFound hooks');
 
-      const serverSource = await Deno.readTextFile(path.join(repoRoot, 'framework', 'server.js'));
+      const serverSource = await Deno.readTextFile(join(repoRoot, 'framework', 'server.js'));
       assert(serverSource.includes('auth.forbidden ?? auth.unauthorized'), 'server should prefer forbidden redirect targets before unauthorized fallbacks for role mismatches');
     });
   } finally {
@@ -1057,7 +1057,7 @@ Deno.test('dev reload SSE is enabled when watch.enabled and watch.reload are tru
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-watch-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -1071,7 +1071,7 @@ Deno.test('dev reload SSE is enabled when watch.enabled and watch.reload are tru
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-watch</body></html>');
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-watch</body></html>');
 
     await withServer(tempRoot, async ({ url }) => {
       const response = await fetch(`${url}/__brackets/dev-reload`);
@@ -1087,7 +1087,7 @@ Deno.test('dev reload SSE is disabled without devMode or watch.reload', async ()
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-off-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -1101,7 +1101,7 @@ Deno.test('dev reload SSE is disabled without devMode or watch.reload', async ()
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-off</body></html>');
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-off</body></html>');
 
     await withServer(tempRoot, async ({ url }) => {
       const response = await fetch(`${url}/__brackets/dev-reload`);
@@ -1117,7 +1117,7 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-dev-sse-on-' });
 
   try {
-    await writeText(path.join(tempRoot, 'config.json'), JSON.stringify({
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
       host: '127.0.0.1',
       port: 0,
       entry: {
@@ -1127,7 +1127,7 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
       }
     }, null, 2));
 
-    await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on</body></html>');
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on</body></html>');
 
     await withDevServer(tempRoot, async ({ url }) => {
       const hostResponse = await fetch(`${url}/__brackets/host`);
@@ -1160,7 +1160,7 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
       };
 
       try {
-        await writeText(path.join(tempRoot, 'app', 'dev-probe.txt'), 'probe');
+        await writeText(join(tempRoot, 'app', 'dev-probe.txt'), 'probe');
         const spaEvent = await raceWithTimeout(
           readNextDevSseEvent(reader, decoder),
           4000,
@@ -1168,7 +1168,7 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
         );
         assertEqual(spaEvent.event, 'spa', 'app tree changes should emit spa');
 
-        await writeText(path.join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on-2</body></html>');
+        await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>dev-on-2</body></html>');
         const fullEvent = await raceWithTimeout(
           readNextDevSseEvent(reader, decoder),
           4000,
