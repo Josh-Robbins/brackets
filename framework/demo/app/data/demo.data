@@ -1,0 +1,50 @@
+/* framework/demo/app/data/demo.data
+ * Interacts with: framework/server.js (discoverBracketsApp, invokeModuleMethod),
+ *   framework/demo/index.html Live tab (:run read + rpc append).
+ *
+ * Demo persistence: SQLite file via host storage.db() → key/value rows in brackets_store.
+ */
+
+const STORE_KEY = 'demo_events';
+
+function normalizePayload(input) {
+  return {
+    text: String(input?.text ?? '').trim() || 'demo row'
+  };
+}
+
+async function loadRows(db) {
+  const raw = await db.read([], { key: STORE_KEY });
+  return Array.isArray(raw) ? raw : [];
+}
+
+async function saveRows(db, rows) {
+  await db.write(rows, { key: STORE_KEY });
+  return rows;
+}
+
+({
+  async events({ storage }) {
+    const db = storage.db('@storage/demo.db');
+    const events = await loadRows(db);
+    return {
+      events,
+      updatedAt: new Date().toISOString()
+    };
+  },
+
+  async append({ storage }, payload) {
+    const db = storage.db('@storage/demo.db');
+    const clean = normalizePayload(payload);
+    const events = await loadRows(db);
+    const row = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: clean.text,
+      at: new Date().toISOString()
+    };
+    events.push(row);
+    const next = events.length > 80 ? events.slice(-80) : events;
+    await saveRows(db, next);
+    return { ok: true, row };
+  }
+})
