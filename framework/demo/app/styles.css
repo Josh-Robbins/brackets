@@ -3,7 +3,7 @@
  * Demo home page — one stylesheet for the packaged demo (framework/demo/app/*).
  *
  * Interacts with:
- *   framework/demo/index.html (link to this file), app/data/demo.data (Live tab + SQLite demo)
+ *   framework/demo/index.html (entry links this file), app/data/demo.data (Live tab + SQLite demo)
  *
  * Conventions:
  *   .brx-*     — BEM-style hooks for the demo marketing / tour UI
@@ -24,8 +24,10 @@
  *  11. Framework tour (directives demo)
  *  12. Reduced motion preference
  *
- * Fonts: loaded from demo index.html via <link> (avoid CSS @import for faster first paint).
+ * Fonts: Google Fonts (Inter, League Spartan) via @import — kept out of index.html shell.
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@600;700&display=swap");
 
 /* --- 1. Design tokens --- */
 
