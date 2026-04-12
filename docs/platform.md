@@ -49,7 +49,7 @@ The root CLI currently supports:
 - `run app dev`
 - `status server`
 - `health`
-- `test app`
+- `run app test`
 
 **Dev stream:** `run app dev` enables the built-in watcher and a dev-only SSE endpoint (`/__brackets/dev-reload`). The browser runtime reconnects when `host.devReload` is true: **edits under `app/`** (and most package files) trigger an **in-place SPA refresh** (current route re-fetched and morphed); changes to **package root `index.html`**, **root config** (`config.yaml` / `config.yml` / `config.json` or `config/brackets.*`), or **core `framework/runtime.js`**, **`framework/datastar.js`**, **`framework/syntax.js`**, **`framework/version.js`** trigger a **full page reload**. You can get the same stream on `run app` by setting `watch.enabled: true` and `watch.reload: true` in `config.yaml` (see [README workflow](../README.md) and [Guide: SPA development](./guide.md#spa-development-run-app-dev)).
 
@@ -59,11 +59,9 @@ Brackets supports:
 
 - route-level auth requirements via `auth`
 - session access via `ctx.auth`
-- CSRF-aware framework requests
-- same-origin checks on framework RPC
+- CSRF validation on state-changing framework RPC (including `POST /__brackets/rpc`)
 - request-size limits
-- secure response headers
-- fetch-metadata-aware same-origin checks on framework RPC
+- secure response headers (including COOP, CORP, and Referrer-Policy defaults)
 
 Current route auth shape:
 
@@ -154,7 +152,7 @@ Current contract:
 Brackets now provides:
 
 - manifest validation through `page()`
-- app verification through `test app`
+- app verification through `run app test`
 - host inspection through `/__brackets/host`
 - public host and app contracts through `/.well-known/brackets-host.json` and `/.well-known/brackets-app.json`
 - regression tests for syntax, runtime, server, transport, and storage

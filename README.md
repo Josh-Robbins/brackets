@@ -30,7 +30,7 @@ If you are evaluating Brackets for the first time, use this order:
 3. Start the root CLI entry for your OS.
 4. Run `info` and `config show`.
 5. Run `run app`, then open the root `index.html` through the built-in host.
-6. Run `test app` to verify the package contract.
+6. Run `run app test` to verify the package contract.
 7. Read [Reference](./docs/reference.md) only when you want the full contract
 
 ## Why Brackets
@@ -193,7 +193,7 @@ The simplest workflow is:
 2. Run `config show`.
 3. Run `run app`.
 4. Open the reported local URL.
-5. Run `health`, `status server`, and `test app` when you want to verify the framework.
+5. Run `health`, `status server`, and `run app test` when you want to verify the framework.
 
 ## Workflow
 
@@ -205,7 +205,7 @@ Inside the root CLI:
 - `run app dev` starts the built-in host in **dev mode** (file watcher + dev SSE: in-place SPA refresh for app files, full reload when root `index.html`, root config, or core `framework/*.js` changes)
 - `status server` shows the current local and network origins
 - `health` probes the running host
-- `test app` runs the bundled Deno framework test suite against the current package
+- `run app test` runs the bundled Deno framework test suite against the current package (`test app` is an alias)
 
 ### Windows (CMD)
 
@@ -223,13 +223,13 @@ External mode stays honest too:
 - set `runtime: external`
 - set `external.origin`
 - start your outside host yourself
-- then use `status server`, `health`, and `test app` from the same CLI
+- then use `status server`, `health`, and `run app test` from the same CLI
 
 ## Tests
 
-The built-in verification path is `test app` from the root CLI.
+The built-in verification path is `run app test` from the root CLI.
 
-The package test file is still [`tests/test.js`](./tests/test.js), and `test app` runs it through the bundled Deno host instead of a separate Node test path. The test suite itself uses **Deno APIs and `jsr:@std/path`** only—it does not import `node:*` modules, so you are not depending on Node.js to run tests (the built-in host still uses Deno’s Node-compat layer internally for `framework/server.js`).
+The package test file is still [`tests/test.js`](./tests/test.js), and `run app test` runs it through the bundled Deno host instead of a separate Node test path. The test suite itself uses **Deno APIs and `jsr:@std/path`** only—it does not import `node:*` modules, so you are not depending on Node.js to run tests (the built-in host still uses Deno’s Node-compat layer internally for `framework/server.js`).
 
 ## Distribution
 
@@ -283,7 +283,7 @@ The current prototype already includes:
 What the current quality bar means:
 
 - the built-in Deno package tests are green
-- the root CLI `test app` path is green
+- the root CLI `run app test` path is green
 - the router, transport, `.data`, and docs now align with the current root-package contract
 
 The main implementation lives in:

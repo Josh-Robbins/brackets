@@ -127,7 +127,7 @@ run app
 run app dev
 status server
 health
-test app
+run app test
 config show
 ```
 
@@ -750,7 +750,7 @@ Use these rules:
 7. Keep state small and page-specific.
 8. Reuse layouts instead of rebuilding page structure when routing can preserve them.
 9. Do not solve performance problems by adding framework ceremony first.
-10. Use `config show`, `info`, `health`, `status server`, and `test app` as part of the normal optimization loop.
+10. Use `config show`, `info`, `health`, `status server`, and `run app test` as part of the normal optimization loop.
 
 Backend-specific AI rule:
 
@@ -778,8 +778,8 @@ When asked to create or extend an app, use this order:
 6. add `.api` only when remote/shared authority is needed
 7. keep config in `config.yaml`
 8. keep the app runnable through the built-in host
-9. use `config show`, `info`, `status server`, `health`, and `test app` often
-10. use `test app` when you want the built-in host to smoke-test the app and syntax layer directly
+9. use `config show`, `info`, `status server`, `health`, and `run app test` often
+10. use `run app test` when you want the built-in host to smoke-test the app and syntax layer directly
 11. add deployment/config notes only after the app contract is clear
 
 When a backend is needed, extend that workflow like this:
@@ -830,7 +830,7 @@ Recommended order:
 2. switch to `run app dev` during active editing
 3. use `status server` to confirm local and network URLs
 4. use `health` to confirm the built-in host is running cleanly
-5. use `test app` to smoke-test the app and syntax layer through the built-in host
+5. use `run app test` to smoke-test the app and syntax layer through the built-in host
 6. add `tls` when the user already has a cert and key
 7. use `proxies` for same-origin backend handoff
 8. use `.api` for shared authority and remote systems
@@ -892,7 +892,7 @@ If an AI is unsure what Brackets wants, prefer:
 - `run app dev`
 - `status server`
 - `health`
-- `test app`
+- `run app test`
 - Datastar-native behavior
 - the Deno-powered built-in host/runtime path
 - the existing Brackets syntax

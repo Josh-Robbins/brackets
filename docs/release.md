@@ -33,9 +33,12 @@ Brackets/
     syntax.js
     agents.md
     demo/
-      splash.html
-      logo.svg
-      favicon.svg
+      index.html
+      app/
+        styles.css
+        logo.svg
+        favicon.svg
+        storage/
     example/
   app/
   tests/
@@ -122,7 +125,7 @@ The intended dev experience is:
 1. Copy or create a Brackets app folder.
 2. Edit `.view`, `.html`, `.logic`, `.api`, `.data`, and storage files directly.
 3. Run the optional local host only when same-origin serving or local file-backed behavior is needed.
-4. Run `status server`, `health`, and `test app` as the built-in verification path.
+4. Run `status server`, `health`, and `run app test` as the built-in verification path.
 5. Assemble the portable folder directly when desired.
 
 The important part is that Brackets remains usable as files first.

@@ -2711,6 +2711,58 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         return;
       }
 
+      if (url.pathname.startsWith('/docs/')) {
+        let decodedPathname;
+        try {
+          decodedPathname = decodeURIComponent(url.pathname);
+        } catch {
+          send(res, 400, 'text/plain; charset=utf-8', 'Bad request');
+          return;
+        }
+        const relative = decodedPathname.replace(/^\/docs\/?/, '').replace(/\\/g, '/');
+        if (!relative || relative.includes('..')) {
+          sendJson(res, 404, {
+            ok: false,
+            error: `Not found: ${url.pathname}`,
+            code: 'BRACKETS_NOT_FOUND',
+            requestId
+          });
+          return;
+        }
+        const docsRoot = path.join(packageRoot, 'docs');
+        let staticTarget;
+        try {
+          staticTarget = ensureWithinRoot(
+            docsRoot,
+            path.join(docsRoot, ...relative.split('/').filter(Boolean)),
+            `docs:${url.pathname}`
+          );
+        } catch {
+          sendJson(res, 404, {
+            ok: false,
+            error: `Not found: ${url.pathname}`,
+            code: 'BRACKETS_NOT_FOUND',
+            requestId
+          });
+          return;
+        }
+        const extension = path.extname(staticTarget).toLowerCase();
+        if (STATIC_SAFE_EXTENSIONS.has(extension) && existsSync(staticTarget)) {
+          const fileInfo = await stat(staticTarget);
+          if (fileInfo.isFile()) {
+            send(res, 200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
+            return;
+          }
+        }
+        sendJson(res, 404, {
+          ok: false,
+          error: `Not found: ${url.pathname}`,
+          code: 'BRACKETS_NOT_FOUND',
+          requestId
+        });
+        return;
+      }
+
       if (url.pathname === '/__brackets/session') {
         sendJson(res, 200, session, {
           'Set-Cookie': cookieHeader

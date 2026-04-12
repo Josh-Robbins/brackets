@@ -63,7 +63,7 @@ If you want the smoothest path in:
 1. [Getting started](#getting-started)
 2. [Guide](./guide.md)
 3. Run `config show` and `info`
-4. Run `health` and `test app`
+4. Run `health` and `run app test`
 5. [Reference](./reference.md)
 
 ## Learn The Model

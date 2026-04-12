@@ -221,7 +221,7 @@ function helpText(config = {}) {
     lines.push('  help            Show this help');
     lines.push('  status server   Show external host status');
     lines.push('  health          Probe the configured external host');
-    lines.push('  test app        Check the configured external host');
+    lines.push('  run app test    Check the configured external host');
     lines.push('  config show     Show the current root config');
     lines.push('  info            Show package/runtime details');
     lines.push('  exit            Exit the CLI');
@@ -229,7 +229,7 @@ function helpText(config = {}) {
     lines.push('External mode notes:');
     lines.push('  - The built-in Deno host is disabled in this mode.');
     lines.push('  - Set external.origin in config.yaml to the host you want Brackets to use.');
-    lines.push('  - Start your external server yourself, then use health, status server, and test app here.');
+    lines.push('  - Start your external server yourself, then use health, status server, and run app test here.');
     lines.push('');
     return lines.join('\n');
   }
@@ -241,7 +241,8 @@ function helpText(config = {}) {
   lines.push('  stop server     Stop the built-in host');
   lines.push('  status server   Show server status');
   lines.push('  health          Probe the running host');
-  lines.push('  test app        Run bundled Deno framework tests');
+  lines.push('  run app test    Run bundled Deno framework tests');
+  lines.push('  test app        Alias for run app test');
   lines.push('  config show     Show the current root config');
   lines.push('  info            Show package/runtime details');
   lines.push('  exit            Stop the host and exit');
@@ -519,6 +520,14 @@ async function executeCommand(parts) {
     return true;
   }
 
+  if (first === 'run' && second === 'app' && third === 'test') {
+    const success = await runTests();
+    if (!success) {
+      Deno.exitCode = 1;
+    }
+    return success;
+  }
+
   if ((first === 'run' && second === 'app') || (first === 'start' && second === 'server')) {
     if (externalMode) {
       if (third === 'dev') {
@@ -526,7 +535,7 @@ async function executeCommand(parts) {
         console.log('Switch runtime back to embedded if you want run app dev.');
       } else {
         console.log('Brackets is in external host mode.');
-        console.log('Start the external server yourself, then use status server, health, or test app.');
+        console.log('Start the external server yourself, then use status server, health, or run app test.');
       }
       return true;
     }
@@ -656,6 +665,9 @@ function commandNeedsSignalHandlers(args) {
   if (!args.length) {
     return true;
   }
+  if (args[0] === 'run' && args[1] === 'app' && args[2] === 'test') {
+    return false;
+  }
   return (args[0] === 'run' && args[1] === 'app') || (args[0] === 'start' && args[1] === 'server');
 }
 
@@ -689,7 +701,9 @@ if (commandNeedsSignalHandlers(args)) {
 if (args.length) {
   const runtime = normalizeRuntime(parseRootConfig());
   const keepGoing = await executeCommand(args);
-  if ((args[0] === 'run' && args[1] === 'app') || (args[0] === 'start' && args[1] === 'server')) {
+  const runAppStartsServer = (args[0] === 'run' && args[1] === 'app' && args[2] !== 'test')
+    || (args[0] === 'start' && args[1] === 'server');
+  if (runAppStartsServer) {
     if (!keepGoing) {
       await shutdown();
       Deno.exit(Deno.exitCode);

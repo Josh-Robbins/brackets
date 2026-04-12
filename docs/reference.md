@@ -336,7 +336,7 @@ Cookie note:
 | `/__brackets/host` | host capability contract |
 | `/.well-known/brackets-host.json` | public host capability contract |
 | `/.well-known/brackets-app.json` | public app contract |
-| `test app` | bundled Deno package contract test |
+| `run app test` | bundled Deno package contract test |
 
 ### Final recommendations
 

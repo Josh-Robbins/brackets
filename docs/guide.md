@@ -133,7 +133,7 @@ For most teams and evaluators, the best first workflow is:
 1. Start with one `.view`, one `.html`, and one `.logic`.
 2. Add `.data` as soon as state or persistence becomes real.
 3. Add `.api` only when the app needs shared authority or external services.
-4. Run `config show`, `status server`, `health`, and `test app` often instead of waiting for confusion later.
+4. Run `config show`, `status server`, `health`, and `run app test` often instead of waiting for confusion later.
 5. Keep files small enough that each one still has one honest job.
 
 ## Framework example package
@@ -144,10 +144,10 @@ The repo ships a **copy-paste** multi-file example under [`framework/example/`](
 
 | Location | Role |
 |----------|------|
-| [`framework/demo/`](../framework/demo/) | Runnable **packaged demo** app the built-in host can serve. |
+| [`framework/demo/`](../framework/demo/) | **Packaged starter** the built-in host can serve: entry `index.html`, splash/health UI, and `app/` assets (styles, icons, sample storage). It does not ship a full `.view`-driven tutorial route in `app/`—see the example row for that. |
 | [`framework/example/`](../framework/example/) | **Templates** showing one full route: `.view` + layout + page + component + `.logic` + `.data` wired together. |
 
-Use the demo to see Brackets running out of the box; use the example folder when you want a **known-good file set** to copy into `app/`.
+Use the demo to see the embedded host and starter shell; use the example folder when you want a **known-good file set** to copy into `app/` for a complete routed page.
 
 ### Package entry (root `index.html`)
 
@@ -430,7 +430,7 @@ If you can explain a file in one sentence, it is probably small enough:
 Use the built-in no-build verification path as part of the normal workflow:
 
 ```powershell
-cli.js test app
+cli.js run app test
 ```
 
 It should catch:
@@ -978,7 +978,7 @@ Brackets now exposes:
 - `/__brackets/host` for the live host contract
 - `/.well-known/brackets-host.json` for the public host contract
 - `/.well-known/brackets-app.json` for the app contract the runtime uses
-- `health`, `status server`, and `test app` through the root CLI
+- `health`, `status server`, and `run app test` through the root CLI
 
 ## Verification
 
@@ -988,7 +988,7 @@ Use the working root CLI and host contract:
 - `info` to confirm the package root, engine path, and entry file
 - `status server` to confirm the active origin
 - `health` to probe the running host
-- `test app` to run the bundled Deno framework checks
+- `run app test` to run the bundled Deno framework checks
 
 ## What An App Should Not Do
 
@@ -1016,4 +1016,4 @@ Use this checklist for any new app:
 8. Use `:loading` / `:error` for async UI.
 9. Use `ctx.cache` for refresh/revalidation behavior.
 10. Use `ctx.auth` and route `auth` for protected flows.
-11. Run `health` and `test app` before deployment.
+11. Run `health` and `run app test` before deployment.

@@ -367,7 +367,7 @@ That means you can keep Brackets portable and swap backend stacks without rewrit
 ## Recommended production release flow
 
 1. Finish the Brackets app as plain files.
-2. Run `health` and `test app`.
+2. Run `health` and `run app test`.
 3. Assemble the release folder.
 4. Mount or copy that release folder into the web container.
 5. Mount writable storage separately if needed.

@@ -78,7 +78,7 @@ Important clarification:
 - the goal is not `file://`
 - the goal is "runs from a desktop folder without needing an external server"
 - the tiny built-in local server is part of the product concept because it removes `file://` and CORS limitations while keeping the workflow local and simple
-- the built-in host in this repo may be implemented with Node today, but Node must remain only one host adapter implementation, not a framework requirement
+- the built-in host in this repo is run by the **bundled Deno** CLI; [`framework/server.js`](../framework/server.js) uses **Deno’s Node compatibility** (`node:*` modules) for the HTTP and filesystem layers—this is not a Node.js install requirement, and Node must remain only one possible host adapter implementation elsewhere, not a framework requirement for Brackets
 
 ### 4. Datastar is the engine
 
@@ -562,7 +562,7 @@ Current implementation progress:
 - the runtime now exposes cache, optimistic state, auth/session, and route-level loading/error helpers
 - the server now exposes sitemap/feed/robots and host/session contracts
 - `.data` now has concrete `json`, `yaml`, and `db` adapters in this repo's built-in host adapter
-- `health`, `status server`, and `test app` now exist as the built-in verification path
+- `health`, `status server`, and `run app test` now exist as the built-in verification path
 
 ### 9. Error and loading model
 
