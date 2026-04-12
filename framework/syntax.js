@@ -194,6 +194,7 @@ const IDENTIFIER_GLOBALS = new Set([
   'new',
   'return',
   'typeof',
+  'void',
   'instanceof',
   'in',
   'await',

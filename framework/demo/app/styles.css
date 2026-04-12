@@ -457,11 +457,45 @@ body::after {
   animation: brxSsePulse 1.8s ease-in-out infinite;
 }
 
-.brx-live-saved {
-  margin: 0;
-  font-size: 0.82rem;
+.brx-live-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.75rem;
+}
+
+.brx-live-label-title {
+  font-size: 0.78rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brx-live-save-feedback {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  animation: brxSaveFeedbackIn 280ms ease-out;
+}
+
+.brx-live-save-feedback--ok {
   color: #15803d;
+}
+
+.brx-live-save-feedback--bad {
+  color: #b91c1c;
+}
+
+@keyframes brxSaveFeedbackIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes brxSsePulse {
@@ -491,14 +525,6 @@ body::after {
   display: grid;
   gap: 0.35rem;
   flex: 1 1 12rem;
-}
-
-.brx-live-field span {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
 }
 
 .brx-live-field input {
