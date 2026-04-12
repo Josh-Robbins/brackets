@@ -1,6 +1,6 @@
 /* framework/demo/app/data/demo.data
  * Interacts with: framework/server.js (discoverBracketsApp, invokeModuleMethod),
- *   framework/demo/index.html Live tab (:run read + rpc append).
+ *   framework/demo/index.html Live tab (:run read + rpc append/update).
  *
  * Demo persistence: SQLite file via host storage.db() → key/value rows in brackets_store.
  */
@@ -46,5 +46,36 @@ async function saveRows(db, rows) {
     const next = events.length > 80 ? events.slice(-80) : events;
     await saveRows(db, next);
     return { ok: true, row };
+  },
+
+  async update({ storage }, payload) {
+    const id = String(payload?.id ?? '').trim();
+    const text = String(payload?.text ?? '').trim();
+    if (!id) {
+      const error = new Error('Row id is required.');
+      error.code = 'DEMO_INVALID';
+      throw error;
+    }
+    if (!text) {
+      const error = new Error('Note text is required.');
+      error.code = 'DEMO_INVALID';
+      throw error;
+    }
+    const db = storage.db('@storage/demo.db');
+    const events = await loadRows(db);
+    const index = events.findIndex((entry) => entry.id === id);
+    if (index === -1) {
+      const error = new Error('That note is no longer in the list.');
+      error.code = 'DEMO_NOT_FOUND';
+      throw error;
+    }
+    const previous = events[index];
+    events[index] = {
+      ...previous,
+      text,
+      at: new Date().toISOString()
+    };
+    await saveRows(db, events);
+    return { ok: true, row: events[index] };
   }
 })

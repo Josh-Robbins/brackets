@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Interacts with: framework/demo/index.html (top bar brand), logo.svg (same shield paths) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="logo-mark-shield-gradient" x1="32" y1="6" x2="32" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f2034" />
+      <stop offset="1" stop-color="#241013" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 12)">
+    <path d="M18 7Q20 6 22 6H42Q44 6 46 7L56 17Q58 19 56.5 21.5L34 48Q32 50.5 30 48L7.5 21.5Q6 19 8 17L18 7Z" fill="url(#logo-mark-shield-gradient)" />
+    <path d="M27 15.5H23.5V29.5H27" fill="none" stroke="#fcfaf7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M37 15.5H40.5V29.5H37" fill="none" stroke="#fcfaf7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

@@ -101,15 +101,11 @@
 
       <div
         class="brx-hero"
-        :state="{ tab: 'scene', line: '', demoLog: null }"
-        :run="void read('/__brackets/live?kind=data&module=demo&method=events&route=/', { as: 'state', path: 'demoLog' })">
+        :state="{ tab: 'scene', line: '', demoLog: null, liveSseOk: true, editingId: null, editDraft: '', saveHint: false }"
+        :run="void read('/__brackets/live?kind=data&module=demo&method=events&route=/', { as: 'state', path: 'demoLog', onOpen: () => mutate('liveSseOk', true), onMessage: () => mutate('liveSseOk', true), onError: () => mutate('liveSseOk', false) }).catch(() => mutate('liveSseOk', false))">
         <div class="brx-topbar">
-          <a class="brx-brand" href="/">
-            <span class="brx-brand-mark"><img src="/app/logo.svg" alt="Brackets" /></span>
-            <span class="brx-brand-copy">
-              <strong>Brackets</strong>
-              <span>Framework</span>
-            </span>
+          <a class="brx-brand" href="/" aria-label="Brackets — home">
+            <span class="brx-brand-mark"><img src="/app/logo-mark.svg" alt="" width="64" height="64" decoding="async" /></span>
           </a>
           <nav class="brx-site-nav">
             <a href="/docs/guide.html">Guide</a>
@@ -215,39 +211,57 @@
           </div>
 
           <div class="brx-tab-panel" :show="tab === 'live'">
-            <section class="brx-live-card">
+            <section class="brx-live-card" aria-labelledby="brx-live-heading">
               <div class="brx-live-title-row">
-                <h2 class="brx-live-heading">SQLite + live read</h2>
-                <p class="brx-sse-badge"><span class="brx-sse-pulse" aria-hidden="true"></span> <code>/__brackets/live</code></p>
+                <h2 class="brx-live-heading" id="brx-live-heading">Live data example</h2>
+                <div class="brx-live-status" aria-live="polite" aria-atomic="true">
+                  <p class="brx-sse-badge brx-sse-badge--live" :show="liveSseOk"><span class="brx-sse-pulse" aria-hidden="true"></span> Live</p>
+                  <p class="brx-sse-badge brx-sse-badge--delayed" :show="!liveSseOk"><span class="brx-sse-pulse brx-sse-pulse--delayed" aria-hidden="true"></span> Delayed</p>
+                </div>
               </div>
-              <p class="brx-live-lead">Event rows persist in <code>@storage/demo.db</code> via the host <code>brackets_store</code> table. The stream re-evaluates when data changes.</p>
+              <p class="brx-live-lead">Your notes are saved to a small database file in this app folder, and the list below updates while this page is open.</p>
+              <p class="brx-live-saved" :show="saveHint" role="status">Saved.</p>
               <div class="brx-live-form">
-                <label class="brx-live-field">
-                  <span>Append a line</span>
-                  <input type="text" :bind="line" placeholder="Type a note" autocomplete="off" />
+                <label class="brx-live-field" for="brx-live-note">
+                  <span>Note</span>
+                  <input id="brx-live-note" name="brx-live-note" type="text" :bind="line" placeholder="Type a note" autocomplete="off" />
                 </label>
-                <button type="button" class="brx-button brx-button--soft" @click="void window.BracketsRuntime.callRpc('data', 'demo', 'append', [{ text: line }]).then(() => mutate('line', ''))">Append</button>
+                <button type="button" class="brx-button brx-button--soft" @click="void window.BracketsRuntime.callRpc('data', 'demo', 'append', [{ text: line }]).then(() => { mutate('line', ''); mutate('saveHint', true); window.setTimeout(() => mutate('saveHint', false), 2000); })">Save</button>
               </div>
               <div class="brx-live-table-wrap">
-                <p class="brx-live-empty" :show="!demoLog || !demoLog.events || !demoLog.events.length">No rows yet. Append a line to seed the database.</p>
+                <p class="brx-live-empty" :show="!demoLog || !demoLog.events || !demoLog.events.length">No notes yet. Add a note above and choose Save.</p>
                 <table class="brx-live-table" :show="demoLog && demoLog.events && demoLog.events.length">
+                  <caption class="brx-sr-only">Notes saved on disk; updated live from the host.</caption>
                   <thead>
                     <tr>
                       <th scope="col">Time</th>
                       <th scope="col">Text</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     <template :each="row in demoLog && demoLog.events ? demoLog.events : []">
                       <tr>
                         <td :text="row.at"></td>
-                        <td :text="row.text"></td>
+                        <td class="brx-live-text-cell">
+                          <span :if="editingId !== row.id" :text="row.text"></span>
+                          <template :if="editingId === row.id">
+                            <input class="brx-live-inline-input" type="text" name="brx-live-edit" :bind="editDraft" aria-label="Edit note" />
+                          </template>
+                        </td>
+                        <td class="brx-live-actions">
+                          <button type="button" class="brx-button brx-button--soft brx-live-action-btn" :show="editingId !== row.id" @click="mutate('editDraft', row.text); mutate('editingId', row.id)">Edit</button>
+                          <span class="brx-live-edit-actions" :show="editingId === row.id">
+                            <button type="button" class="brx-button brx-button--soft brx-live-action-btn" @click="void window.BracketsRuntime.callRpc('data', 'demo', 'update', [{ id: editingId, text: editDraft }]).then(() => { mutate('editingId', null); mutate('editDraft', ''); mutate('saveHint', true); window.setTimeout(() => mutate('saveHint', false), 2000); })">Save</button>
+                            <button type="button" class="brx-button brx-button--soft brx-live-action-btn" @click="mutate('editingId', null); mutate('editDraft', '')">Cancel</button>
+                          </span>
+                        </td>
                       </tr>
                     </template>
                   </tbody>
                 </table>
               </div>
-              <p class="brx-health-updated" :show="demoLog && demoLog.updatedAt" :text="demoLog && demoLog.updatedAt ? ('Last snapshot: ' + demoLog.updatedAt) : ''"></p>
+              <p class="brx-health-updated" :show="demoLog && demoLog.updatedAt" :text="demoLog && demoLog.updatedAt ? ('Updated ' + demoLog.updatedAt) : ''"></p>
             </section>
           </div>
         </div>
