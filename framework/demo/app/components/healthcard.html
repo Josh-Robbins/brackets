@@ -1,0 +1,48 @@
+<!-- framework/demo/app/components/healthcard.html
+     Interacts with: app/components/siderail.html (:use), app/styles.css
+     Host health meter + stats; data-brx-* hooks for runtime health scripts.
+-->
+<div class="brx-host-health-card">
+  <div class="brx-health-toolbar">
+    <strong>Host health</strong>
+    <span class="brx-pulse" data-brx-shell-light data-state="checking">
+      <span class="brx-dot checking"></span>
+      <span data-brx-shell-text>checking</span>
+    </span>
+  </div>
+
+  <div class="brx-health-card">
+    <div class="brx-health-live">
+      <p class="brx-health-summary" data-brx-health-summary>Measuring the host now.</p>
+      <div class="brx-health-meter" data-brx-health-meter data-state="checking">
+        <div class="brx-health-bar-wrap">
+          <div class="brx-health-bar-labels">
+            <span>Latency</span>
+            <span data-brx-health-latency>...</span>
+          </div>
+          <div class="brx-health-track">
+            <div class="brx-health-fill" data-brx-health-fill style="width:40%"></div>
+          </div>
+        </div>
+      </div>
+      <ul class="brx-health-reasons" data-brx-health-reasons>
+        <li>Waiting for the first response.</li>
+      </ul>
+    </div>
+
+    <div class="brx-health-stats">
+      <div class="brx-health-stat">
+        <span>Latency</span>
+        <strong data-brx-health-latency>...</strong>
+      </div>
+      <div class="brx-health-stat">
+        <span>Runtime</span>
+        <strong data-brx-health-runtime>embedded / deno</strong>
+      </div>
+      <div class="brx-health-stat">
+        <span>Mode</span>
+        <strong data-brx-health-mode>dynamic</strong>
+      </div>
+    </div>
+  </div>
+</div>

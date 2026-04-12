@@ -1,0 +1,53 @@
+<!-- framework/demo/app/components/siderail.html
+     Interacts with: app/home/home.html (:use), app/components/healthcard.html (:use), app/styles.css
+-->
+<div class="brx-side">
+  <p class="brx-side-intro">Live host status and quick links for your local Brackets instance.</p>
+
+  <div :use="'@app/components/healthcard.html'"></div>
+
+  <div class="brx-rail">
+    <div class="brx-rail-card brx-access-card">
+      <h3 class="brx-access-title">Access points</h3>
+      <div class="brx-access-list">
+        <div class="brx-access-item">
+          <span>Local</span>
+          <code data-brx-local-origin></code>
+        </div>
+        <div class="brx-access-item">
+          <span>Network</span>
+          <code data-brx-network-origin>Not exposed yet</code>
+        </div>
+      </div>
+      <p class="brx-access-note">Set <code>host: 0.0.0.0</code> in config.yaml to expose on your local network.</p>
+    </div>
+
+    <div class="brx-rail-card brx-start-card">
+      <h3 class="brx-start-heading">Start building</h3>
+      <p class="brx-start-intro">Create files in <code>app/</code> and the framework picks them up automatically.</p>
+      <div class="brx-start-grid">
+        <div class="brx-start-step">
+          <span class="brx-step-number">1</span>
+          <div class="brx-step-copy">
+            <strong>Add a view</strong>
+            Create <code>app/home/home.view</code> to register your home route.
+          </div>
+        </div>
+        <div class="brx-start-step">
+          <span class="brx-step-number">2</span>
+          <div class="brx-step-copy">
+            <strong>Add a page</strong>
+            Create <code>app/home/home.html</code> with your HTML content.
+          </div>
+        </div>
+        <div class="brx-start-step">
+          <span class="brx-step-number">3</span>
+          <div class="brx-step-copy">
+            <strong>Router</strong>
+            Use <code>app/router.logic</code> for global hooks and declared routes.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
