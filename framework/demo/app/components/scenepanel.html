@@ -1,0 +1,49 @@
+<!-- framework/demo/app/components/scenepanel.html
+     Interacts with: app/home/home.html (:use), app/styles.css
+     Scene tab: static illustrative board (no :state).
+-->
+<div class="brx-scene">
+  <div class="brx-scene-grid"></div>
+  <div class="brx-scene-glow brx-scene-glow--one"></div>
+  <div class="brx-scene-glow brx-scene-glow--two"></div>
+  <div class="brx-scene-stack">
+    <div class="brx-scene-board">
+      <div class="brx-scene-toolbar">
+        <span class="brx-toolbar-dots"><span></span><span></span><span></span></span>
+        <span class="brx-toolbar-pill">app/</span>
+      </div>
+      <div class="brx-mini-grid">
+        <div class="brx-mini-card">
+          <strong>home.view</strong>
+          <p>Route: <code>/</code></p>
+        </div>
+        <div class="brx-mini-card">
+          <strong>components/</strong>
+          <p>Reusable <code>.html</code> via <code>:use</code></p>
+        </div>
+        <div class="brx-mini-card brx-mini-card--wide">
+          <strong>layout.html</strong>
+          <p>Shared layout with <code>:mount</code> slot</p>
+        </div>
+      </div>
+    </div>
+    <div class="brx-scene-panel">
+      <div class="brx-scene-stat">
+        <span>Runtime</span>
+        <strong data-brx-health-runtime>embedded / deno</strong>
+      </div>
+      <div class="brx-scene-stat">
+        <span>Mode</span>
+        <strong data-brx-health-mode>dynamic / same-origin</strong>
+      </div>
+      <div class="brx-scene-stat">
+        <span>Local</span>
+        <strong data-brx-local-origin></strong>
+      </div>
+      <div class="brx-scene-stat">
+        <span>Network</span>
+        <strong data-brx-network-origin>Not exposed yet</strong>
+      </div>
+    </div>
+  </div>
+</div>
