@@ -1,8 +1,9 @@
 <!-- framework/demo/app/components/healthcard.html
      Interacts with: app/components/siderail.html (:use), app/styles.css
-     Host health meter + stats; data-brx-* hooks for runtime health scripts.
+     Demo-only: one-shot host probe via public BracketsRuntime.refreshHealth() (latency meter).
+     Initial host text comes from index.html #host JSON + runtime bootstrap.
 -->
-<div class="brx-host-health-card">
+<div class="brx-host-health-card" :run="window.BracketsRuntime.refreshHealth()">
   <div class="brx-health-toolbar">
     <strong>Host health</strong>
     <span class="brx-pulse" data-brx-shell-light data-state="checking">

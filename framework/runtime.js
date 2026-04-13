@@ -36,7 +36,8 @@ let cacheSequence = 0;
 let sessionRequestPromise = null;
 let sessionFetchedAt = 0;
 const MAX_NAVIGATION_REDIRECTS = 12;
-const FRAMEWORK_TEMPLATE_CACHE_TTL_MS = 1000;
+/** Long enough to avoid refetching the same :use template on every SSE tick / directive pass. */
+const FRAMEWORK_TEMPLATE_CACHE_TTL_MS = 300000;
 const FRAMEWORK_DIRECTIVE_MAX_PASSES = 8;
 const ROUTE_RENDER_CACHE_TTL_MS = 1000;
 const SESSION_CACHE_TTL_MS = 5000;
@@ -3023,7 +3024,6 @@ function restoreStarterShell() {
   currentShell = 'starter';
   document.title = starterTitle;
   observeFrameworkDom();
-  void refreshHealth(frameworkConfig);
 }
 
 async function renderRoute(pathname, options = {}) {
@@ -3472,7 +3472,7 @@ async function runDevSpaRefresh() {
       navigationToken: navigationSequence
     }).catch(() => null);
   } else {
-    void refreshHealth(frameworkConfig);
+    void applyFrameworkDirectives(rootElement());
   }
 }
 
@@ -3530,14 +3530,7 @@ async function bootstrap() {
 
   if (currentShell === 'starter') {
     await applyFrameworkDirectives(root);
-    await refreshHealth(frameworkConfig);
   }
-
-  window.setInterval(() => {
-    if (currentShell === 'starter') {
-      void refreshHealth(frameworkConfig);
-    }
-  }, 5000);
 }
 
 void bootstrap();
