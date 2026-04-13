@@ -430,6 +430,10 @@ body::after {
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 600;
+  /* Default to live until Datastar applies --live / --delayed (avoids a grey unstyled flash). */
+  color: #15803d;
+  background: rgba(220, 252, 231, 0.95);
+  border: 1px solid rgba(34, 197, 94, 0.35);
 }
 
 .brx-sse-badge--live {

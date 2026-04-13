@@ -13,8 +13,7 @@
     <div class="brx-live-status" aria-live="polite" aria-atomic="true">
       <p class="brx-sse-badge" :class.brx-sse-badge--live="liveSseOk" :class.brx-sse-badge--delayed="!liveSseOk">
         <span class="brx-sse-pulse" :class.brx-sse-pulse--delayed="!liveSseOk" aria-hidden="true"></span>
-        <span class="brx-sse-label" :show="liveSseOk">Live</span>
-        <span class="brx-sse-label" :show="!liveSseOk">Delayed</span>
+        <span class="brx-sse-label" :text="liveSseOk ? 'Live' : 'Delayed'"></span>
       </p>
     </div>
   </div>
