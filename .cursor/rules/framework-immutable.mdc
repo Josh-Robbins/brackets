@@ -1,0 +1,27 @@
+---
+description: Brackets core is immutable — app and feature work never edit engine, host bundle, or release artifacts
+alwaysApply: true
+---
+
+# Framework boundary (do not edit for normal builds)
+
+For **any** app, demo, or feature work, **do not modify** these paths. Put behavior in **`app/`**, entry **`index.html`**, **`config.yaml` / `config.*`**, and route/view/html files under the configured entry folder instead.
+
+## Immutable paths
+
+| Path | Role |
+|------|------|
+| `framework/datastar.js` | Datastar runtime (vendor bundle) |
+| `framework/runtime.js` | Brackets client runtime |
+| `framework/server.js` | Embedded host / HTTP router |
+| `framework/syntax.js` | HTML → directive compiler |
+| `framework/version.js` | Framework version metadata |
+| `framework/host/**` | Bundled Deno (and other engine binaries) |
+| `release/**` | Release packaging / artifacts (if present) |
+
+## Exceptions (rare)
+
+- **Upstream Brackets maintenance** with explicit maintainer intent (bump version, security fix in core).
+- Never “fix” an app by patching these files—extend via **app modules**, **`.view` / `.html`**, **`.data` / `.logic`**, and **config**.
+
+If a task seems to require changing a file above, **stop** and implement the same outcome outside the framework layer, or ask the user to confirm a core change.
