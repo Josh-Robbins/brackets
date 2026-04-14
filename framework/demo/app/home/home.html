@@ -4,7 +4,7 @@
 <div class="brx-splash">
   <div class="brx-hero">
     <div class="brx-topbar">
-      <a class="brx-brand" href="/">
+      <a class="brx-brand" href="/" aria-label="Brackets Framework home">
         <span class="brx-brand-mark"><img src="/app/logo-mark.svg" alt="" width="64" height="64" decoding="async" /></span>
         <span class="brx-brand-copy">
           <strong>Brackets</strong>
@@ -22,7 +22,7 @@
     <div class="brx-eyebrow">v0.95.0 &middot; Embedded host</div>
 
     <div class="brx-wordmark-wrap">
-      <div class="brx-wordmark" role="img" aria-label="Brackets">
+      <div class="brx-wordmark" role="img" aria-label="Brackets Framework wordmark">
         <img src="/app/logo.svg" alt="" style="width:100%;height:auto;" />
       </div>
     </div>
@@ -63,16 +63,46 @@
     </div>
 
     <div class="brx-hero-dock" id="brx-live" :state="{ tab: 'scene' }">
-      <div class="brx-tablist" role="toolbar" aria-label="Hero panels">
-        <button type="button" class="brx-tab" :set.aria-pressed="tab === 'scene'" @click="mutate('tab', 'scene')">Scene</button>
-        <button type="button" class="brx-tab" :set.aria-pressed="tab === 'live'" @click="mutate('tab', 'live')">Live data</button>
+      <div class="brx-tablist" role="tablist" aria-label="Hero panels">
+        <button
+          type="button"
+          class="brx-tab"
+          id="brx-tab-scene"
+          role="tab"
+          aria-controls="brx-panel-scene"
+          :set.aria-selected="tab === 'scene' ? 'true' : 'false'"
+          :set.tabindex="tab === 'scene' ? 0 : -1"
+          @click="mutate('tab', 'scene')"
+        >Scene</button>
+        <button
+          type="button"
+          class="brx-tab"
+          id="brx-tab-live"
+          role="tab"
+          aria-controls="brx-panel-live"
+          :set.aria-selected="tab === 'live' ? 'true' : 'false'"
+          :set.tabindex="tab === 'live' ? 0 : -1"
+          @click="mutate('tab', 'live')"
+        >Live data</button>
       </div>
 
-      <div class="brx-tab-panel brx-tab-panel--scene" :show="tab === 'scene'">
+      <div
+        id="brx-panel-scene"
+        class="brx-tab-panel brx-tab-panel--scene"
+        role="tabpanel"
+        aria-labelledby="brx-tab-scene"
+        :show="tab === 'scene'"
+      >
         <div :use="'@app/components/scenepanel.html'"></div>
       </div>
 
-      <div class="brx-tab-panel" :show="tab === 'live'">
+      <div
+        id="brx-panel-live"
+        class="brx-tab-panel"
+        role="tabpanel"
+        aria-labelledby="brx-tab-live"
+        :show="tab === 'live'"
+      >
         <div :use="'@app/components/livedata.html'"></div>
       </div>
     </div>

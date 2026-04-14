@@ -114,7 +114,9 @@ const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     headers: {
       contentSecurityPolicy: '',
       strictTransportSecurity: '',
-      permissionsPolicy: ''
+      permissionsPolicy: '',
+      htmlDocumentCacheControl: '',
+      staticAssetCacheControl: ''
     }
   },
   health: {
@@ -371,7 +373,9 @@ function normalizeBracketsConfig(rawConfig = {}) {
       headers: {
         contentSecurityPolicy: String(rawSecurityHeaders.contentSecurityPolicy ?? defaults.security.headers.contentSecurityPolicy ?? '').trim(),
         strictTransportSecurity: String(rawSecurityHeaders.strictTransportSecurity ?? defaults.security.headers.strictTransportSecurity ?? '').trim(),
-        permissionsPolicy: String(rawSecurityHeaders.permissionsPolicy ?? defaults.security.headers.permissionsPolicy ?? '').trim()
+        permissionsPolicy: String(rawSecurityHeaders.permissionsPolicy ?? defaults.security.headers.permissionsPolicy ?? '').trim(),
+        htmlDocumentCacheControl: String(rawSecurityHeaders.htmlDocumentCacheControl ?? defaults.security.headers.htmlDocumentCacheControl ?? '').trim(),
+        staticAssetCacheControl: String(rawSecurityHeaders.staticAssetCacheControl ?? defaults.security.headers.staticAssetCacheControl ?? '').trim()
       }
     },
     health: {
@@ -733,6 +737,13 @@ function defaultIdFromView(appRoot, viewFile) {
   return segments.join('-');
 }
 
+function coalesceLayoutFileWithPageHtml(htmlFile, layoutFile) {
+  if (!htmlFile || !layoutFile) {
+    return layoutFile ?? null;
+  }
+  return path.resolve(layoutFile) === path.resolve(htmlFile) ? null : layoutFile;
+}
+
 function resolveAppReference(appRoot, sourceFile, reference, fallbackCandidates = []) {
   const candidates = [];
   if (reference) {
@@ -812,7 +823,10 @@ function createDeclaredRoute(appRoot, entryRoot, sourceFile, definition, default
     ? null
     : resolveAppReference(appRoot, sourceFile, merged.html ?? null, []);
   const logicFile = resolveAppReference(appRoot, sourceFile, merged.logic ?? null, []);
-  const layoutFile = resolveAppReference(appRoot, sourceFile, merged.layout ?? null, []);
+  const layoutFile = coalesceLayoutFileWithPageHtml(
+    htmlFile,
+    resolveAppReference(appRoot, sourceFile, merged.layout ?? null, [])
+  );
 
   return {
     id,
@@ -1097,12 +1111,12 @@ async function discoverBracketsApp(packageRoot, entryRoot, config) {
       viewFile.replace(`${path.sep}views${path.sep}`, `${path.sep}logic${path.sep}`).replace(/\.view$/i, '.logic'),
       path.join(appRoot, `${basename}.logic`)
     ]);
-    const layoutFile = resolveAppReference(
+    const layoutFile = coalesceLayoutFileWithPageHtml(htmlFile, resolveAppReference(
       appRoot,
       viewFile,
       manifest.layout ?? null,
       inferredLayoutPath ? [inferredLayoutPath] : []
-    );
+    ));
     const aliases = [
       ...(Array.isArray(manifest.aliases) ? manifest.aliases : []),
       ...(manifest.alias ? [manifest.alias] : [])
@@ -2136,6 +2150,41 @@ function buildFeedXml(config, origin, snapshot) {
   ].join('\n');
 }
 
+function buildHtmlShellCacheHeaders(_req, config) {
+  const v = config?.security?.headers?.htmlDocumentCacheControl;
+  if (typeof v === 'string' && v.trim()) {
+    return { 'Cache-Control': v.trim() };
+  }
+  return {};
+}
+
+const STATIC_LONG_CACHE_EXTENSIONS = new Set([
+  '.css',
+  '.js',
+  '.map',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.ico',
+  '.woff',
+  '.woff2'
+]);
+
+function buildStaticAssetCacheHeaders(config, extension) {
+  const v = config?.security?.headers?.staticAssetCacheControl;
+  if (typeof v !== 'string' || !v.trim()) {
+    return {};
+  }
+  const ext = String(extension ?? '').toLowerCase();
+  if (!STATIC_LONG_CACHE_EXTENSIONS.has(ext)) {
+    return {};
+  }
+  return { 'Cache-Control': v.trim() };
+}
+
 function buildResponseHeaders(req, config) {
   const headers = { ...DEFAULT_RESPONSE_HEADERS };
   const h = config?.security?.headers;
@@ -2475,17 +2524,114 @@ function hydratePackagedIndexHtml(source, { csrfToken = '', session = null, host
   return html;
 }
 
+const SHELL_ROUTE_HEAD_MARK = 'data-brackets-route';
+
+function resolveCanonicalHrefForShell(href, origin) {
+  const s = String(href ?? '').trim();
+  if (!s) {
+    return '';
+  }
+  try {
+    return new URL(s, origin).href;
+  } catch {
+    return '';
+  }
+}
+
+function injectShellRouteHead(html, pathname, snapshot, origin) {
+  const targetPath = normalizePublicPath(pathname);
+  const match = matchDiscoveredRoute(snapshot, targetPath);
+  if (!match || match.route.redirectTo) {
+    return html;
+  }
+
+  const rec = routeRecord(match.route, targetPath);
+  const meta = rec.meta && typeof rec.meta === 'object' ? rec.meta : {};
+  const seo = rec.seo && typeof rec.seo === 'object' ? rec.seo : {};
+
+  const title = String(rec.title ?? '').trim();
+  const description = typeof meta.description === 'string' ? meta.description.trim() : '';
+  const canonicalRaw = typeof seo.canonical === 'string' ? seo.canonical.trim() : '';
+  const canonical = canonicalRaw ? resolveCanonicalHrefForShell(canonicalRaw, origin) : '';
+  const robots = typeof seo.robots === 'string' ? seo.robots.trim() : '';
+
+  const metaLines = [];
+  if (description) {
+    metaLines.push(`  <meta ${SHELL_ROUTE_HEAD_MARK}="1" name="description" content="${safeText(description)}" />`);
+  }
+  if (canonical) {
+    metaLines.push(`  <link ${SHELL_ROUTE_HEAD_MARK}="1" rel="canonical" href="${safeText(canonical)}" />`);
+  }
+  if (robots) {
+    metaLines.push(`  <meta ${SHELL_ROUTE_HEAD_MARK}="1" name="robots" content="${safeText(robots)}" />`);
+  }
+
+  let out = html;
+  if (typeof meta.lang === 'string' && meta.lang.trim()) {
+    const lang = safeText(meta.lang.trim());
+    out = out.replace(/^(\s*<html)([^>]*)(>)/im, (full, open, attrs, gt) => {
+      if (/\slang=/i.test(attrs)) {
+        return `${open}${attrs.replace(/\slang="[^"]*"/i, ` lang="${lang}"`)}${gt}`;
+      }
+      return `${open} lang="${lang}"${attrs}${gt}`;
+    });
+  }
+  if (typeof meta.dir === 'string' && meta.dir.trim()) {
+    const dir = safeText(meta.dir.trim());
+    out = out.replace(/^(\s*<html)([^>]*)(>)/im, (full, open, attrs, gt) => {
+      if (/\sdir=/i.test(attrs)) {
+        return `${open}${attrs.replace(/\sdir="[^"]*"/i, ` dir="${dir}"`)}${gt}`;
+      }
+      return `${open} dir="${dir}"${attrs}${gt}`;
+    });
+  }
+
+  const hasHeadSignal = Boolean(title || metaLines.length);
+  if (!hasHeadSignal) {
+    return out;
+  }
+
+  const titleTag = title ? `  <title>${safeText(title)}</title>` : '';
+  if (titleTag) {
+    if (/<title>[\s\S]*?<\/title>/i.test(out)) {
+      out = out.replace(/<title>[\s\S]*?<\/title>/i, titleTag);
+    } else {
+      out = out.replace(/<head>/i, `<head>\n${titleTag}\n`);
+    }
+  }
+
+  if (metaLines.length) {
+    const block = `${metaLines.join('\n')}\n`;
+    if (/<\/title>/i.test(out)) {
+      out = out.replace(/<\/title>/i, `</title>\n${block}`);
+    } else {
+      out = out.replace(/<meta\s+charset="utf-8"\s*\/?>/i, (m) => `${m}\n${block}`);
+    }
+  }
+
+  return out;
+}
+
+function resolveRobotsTxtPath(packageRoot, entryRoot) {
+  const entryRobots = path.join(entryRoot.absolutePath, 'robots.txt');
+  const packageRobots = path.join(packageRoot, 'robots.txt');
+  if (existsSync(entryRobots)) {
+    return entryRobots;
+  }
+  return packageRobots;
+}
+
 export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode: devModeOption = false } = {}) {
   const resolvedAppRoot = path.resolve(appRoot);
   const packageRoot = path.basename(resolvedAppRoot).toLowerCase() === 'app'
     ? path.dirname(resolvedAppRoot)
     : resolvedAppRoot;
   const readmePath = path.join(packageRoot, 'README.md');
-  const robotsPath = path.join(packageRoot, 'robots.txt');
   const { config } = await loadBracketsConfig(packageRoot);
   const liveReload = Boolean(devModeOption)
     || (config.watch?.enabled === true && config.watch?.reload === true);
   const entryRoot = resolveEntryFolder(packageRoot, config);
+  const robotsPath = resolveRobotsTxtPath(packageRoot, entryRoot);
 
   if (!existsSync(entryRoot.indexPath)) {
     throw new Error(`Missing Brackets entry file at ${entryRoot.indexPath}`);
@@ -2809,7 +2955,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (STATIC_SAFE_EXTENSIONS.has(extension) && existsSync(staticTarget)) {
           const fileInfo = await stat(staticTarget);
           if (fileInfo.isFile()) {
-            respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
+            respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget), buildStaticAssetCacheHeaders(config, extension));
             return;
           }
         }
@@ -3184,19 +3330,22 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       if (STATIC_SAFE_EXTENSIONS.has(extension) && existsSync(staticTarget)) {
         const fileInfo = await stat(staticTarget);
         if (fileInfo.isFile()) {
-          respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
+          respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget), buildStaticAssetCacheHeaders(config, extension));
           return;
         }
       }
 
       if (shouldServeShell(url.pathname) && existsSync(entryRoot.indexPath)) {
         const source = await readText(entryRoot.indexPath);
-        respond.send(200, 'text/html; charset=utf-8', transformHtmlSyntax(hydratePackagedIndexHtml(source, {
+        let shellHtmlOut = hydratePackagedIndexHtml(source, {
           csrfToken,
           session,
           host: hostContract,
           appConfig: config
-        })), {
+        });
+        shellHtmlOut = injectShellRouteHead(shellHtmlOut, decodedPathname, appSnapshot, origin);
+        respond.send(200, 'text/html; charset=utf-8', transformHtmlSyntax(shellHtmlOut), {
+          ...buildHtmlShellCacheHeaders(req, config),
           'Set-Cookie': cookieHeader
         });
         return;

@@ -1226,3 +1226,27 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
     await Deno.remove(tempRoot, { recursive: true });
   }
 });
+
+Deno.test('package demo entry: render contract and shell inject route metadata', async () => {
+  await withServer(repoRoot, async ({ url }) => {
+    const renderPayload = await fetch(`${url}/__brackets/render?path=%2F`).then((response) => response.json());
+    assertEqual(renderPayload.ok, true, 'render should succeed for demo /');
+    assertEqual(renderPayload.layoutPath, null, 'demo home route should not use a layout file');
+    const splashCount = (String(renderPayload.html ?? '').match(/brx-splash/g) ?? []).length;
+    assertEqual(splashCount, 1, 'route HTML should include the hero fragment once');
+
+    const homeHtml = await fetch(url).then((response) => response.text());
+    assert(homeHtml.includes('data-brackets-route'), 'shell HTML should inject managed route head tags');
+    assert(
+      homeHtml.includes('Brackets framework demo'),
+      'shell should include meta description from home.view'
+    );
+    assert(homeHtml.includes('<title>'), 'shell should include a document title');
+    assert(homeHtml.includes('Brackets</title>') || homeHtml.includes('<title>Brackets</title>'), 'shell title should match route');
+
+    const contract = await fetch(`${url}/.well-known/brackets-app.json`).then((response) => response.json());
+    const homeRoute = contract.routes.find((r) => r.route === '/');
+    assert(homeRoute, 'contract should list / route');
+    assertEqual(homeRoute.layoutPath, null, 'contract should not report a layout path for flat demo home');
+  });
+});

@@ -9,7 +9,7 @@
   :run="read('/__brackets/live?kind=data&module=demo&method=events&route=/&intervalMs=2500', { as: 'state', path: 'demoLog', onOpen: () => mutate('liveSseOk', true), onMessage: () => mutate('liveSseOk', true), onError: () => mutate('liveSseOk', false) }).catch(() => mutate('liveSseOk', false))"
 >
   <div class="brx-live-title-row">
-    <h2 class="brx-live-heading" id="brx-live-heading">Live data example</h2>
+    <h3 class="brx-live-heading" id="brx-live-heading">Live data example</h3>
     <div class="brx-live-status" aria-live="polite" aria-atomic="true">
       <p class="brx-sse-badge" :class.brx-sse-badge--live="liveSseOk" :class.brx-sse-badge--delayed="!liveSseOk">
         <span class="brx-sse-pulse" :class.brx-sse-pulse--delayed="!liveSseOk" aria-hidden="true"></span>

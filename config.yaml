@@ -89,6 +89,9 @@ security:
   #   contentSecurityPolicy: "default-src 'self'"
   #   strictTransportSecurity: "max-age=63072000; includeSubDomains"
   #   permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+  #   # Stricter shell / asset caching (production-style); see docs/reference.md — Production-oriented HTTP defaults
+  #   htmlDocumentCacheControl: "no-store"
+  #   staticAssetCacheControl: "public, max-age=31536000, immutable"
 
   storage:
     # Environment variable name used for encrypted local persistence.

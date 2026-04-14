@@ -255,6 +255,10 @@ On client-side navigation, the runtime reconciles the active route into the live
 
 Tags created or updated for routes carry `data-brackets-route` so they stay distinct from any static tags in the entry `index.html`. Restoring the starter shell clears those managed tags and resets `lang` / `dir` to the entry document’s initial values.
 
+The embedded host also injects the same **title**, **description**, **canonical**, **robots**, **lang**, and **dir** values into the **first HTML response** for SPA-style shells (routes matched from the URL path) so **View Source** and non-JS crawlers see the same manifest-driven head data as the live document after hydration.
+
+Other `seo` fields (`feed`, `sitemap`, `alternates`, `changefreq`, `priority`, structured data, and similar) feed **sitemap.xml**, **feed.xml**, and host-side generators; they are not duplicated as arbitrary `<meta>` tags in the runtime unless documented per-field.
+
 ### Production-oriented HTTP defaults
 
 The embedded host sends a baseline set of safe response headers on every reply. You can extend or override parts of that set under `security.headers` in `config.yaml`:
@@ -264,8 +268,12 @@ The embedded host sends a baseline set of safe response headers on every reply. 
 | `contentSecurityPolicy` | Optional `Content-Security-Policy` value. The stock entry HTML uses inline scripts and an import map; a strict policy usually needs nonces or refactors—validate in a staging build. |
 | `strictTransportSecurity` | Optional `Strict-Transport-Security` value. Applied only when the connection is HTTPS (`req.socket.encrypted`). |
 | `permissionsPolicy` | Optional override for `Permissions-Policy` (defaults still restrict camera, microphone, and geolocation when unset). |
+| `htmlDocumentCacheControl` | Optional override for `Cache-Control` on **HTML shell** responses (SPA `index.html`). Leave unset for the default `no-cache` baseline; use `no-store` (or stricter) when the shell is sensitive. |
+| `staticAssetCacheControl` | Optional long-lived `Cache-Control` for **fingerprint-safe static assets** only (for example `.css`, `.js`, images, fonts). HTML, JSON, and API responses are not affected. |
 
 JSON responses from `__brackets` endpoints use `Cache-Control: no-store` so route payloads and RPC results are not cached by shared caches.
+
+**Local vs production:** loopback development keeps the defaults above. For HTTPS deployments, set `strictTransportSecurity` only after verifying TLS end-to-end. Pair `strictTransportSecurity` with `secure` cookies and SameSite policy on your edge or host. Tighten `htmlDocumentCacheControl` / `staticAssetCacheControl` when you have hashed asset filenames or a CDN.
 
 ### `.api` helper surface
 
