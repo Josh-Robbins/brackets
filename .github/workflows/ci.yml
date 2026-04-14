@@ -1,0 +1,26 @@
+# Interacts with: tests/test.js, Deno
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  deno-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Run framework tests
+        run: deno test tests/test.js --allow-all
+
+  release-artifacts:
+    if: hashFiles('release/**') != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List release artifacts (smoke)
+        run: find release -type f 2>/dev/null | head -50
