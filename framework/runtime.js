@@ -10,6 +10,8 @@ let apiNamespace = {};
 let sessionState = { authenticated: false, user: null };
 let starterMarkup = '';
 let starterTitle = document.title;
+let starterDocumentLang = '';
+let starterDocumentDir = '';
 let currentShell = 'starter';
 let resolvedAppContract = null;
 const frameworkCache = new Map();
@@ -65,6 +67,131 @@ function setMetaContent(name, value) {
   const element = document.querySelector(`meta[name="${String(name ?? '')}"]`);
   if (element) {
     element.setAttribute('content', String(value ?? ''));
+  }
+}
+
+const BRACKETS_ROUTE_HEAD_MARK = 'data-brackets-route';
+
+function resolveCanonicalHref(href) {
+  const s = String(href ?? '').trim();
+  if (!s) {
+    return '';
+  }
+  if (/^https?:\/\//i.test(s)) {
+    return s;
+  }
+  try {
+    return new URL(s, window.location.origin).href;
+  } catch {
+    return s;
+  }
+}
+
+function setRouteMetaDescription(text) {
+  const value = String(text ?? '').trim();
+  let meta = document.head?.querySelector(`meta[${BRACKETS_ROUTE_HEAD_MARK}][name="description"]`);
+  if (!value) {
+    meta?.remove();
+    return;
+  }
+  if (!meta && document.head) {
+    meta = document.createElement('meta');
+    meta.setAttribute(BRACKETS_ROUTE_HEAD_MARK, '1');
+    meta.setAttribute('name', 'description');
+    document.head.appendChild(meta);
+  }
+  if (meta) {
+    meta.setAttribute('content', value);
+  }
+}
+
+function setRouteCanonical(href) {
+  const value = String(href ?? '').trim();
+  let link = document.head?.querySelector(`link[${BRACKETS_ROUTE_HEAD_MARK}][rel="canonical"]`);
+  if (!value) {
+    link?.remove();
+    return;
+  }
+  const resolved = resolveCanonicalHref(value);
+  if (!resolved) {
+    link?.remove();
+    return;
+  }
+  if (!link && document.head) {
+    link = document.createElement('link');
+    link.setAttribute(BRACKETS_ROUTE_HEAD_MARK, '1');
+    link.setAttribute('rel', 'canonical');
+    document.head.appendChild(link);
+  }
+  if (link) {
+    link.setAttribute('href', resolved);
+  }
+}
+
+function setRouteRobots(content) {
+  const value = String(content ?? '').trim();
+  let meta = document.head?.querySelector(`meta[${BRACKETS_ROUTE_HEAD_MARK}][name="robots"]`);
+  if (!value) {
+    meta?.remove();
+    return;
+  }
+  if (!meta && document.head) {
+    meta = document.createElement('meta');
+    meta.setAttribute(BRACKETS_ROUTE_HEAD_MARK, '1');
+    meta.setAttribute('name', 'robots');
+    document.head.appendChild(meta);
+  }
+  if (meta) {
+    meta.setAttribute('content', value);
+  }
+}
+
+function applyRouteDocumentHead(route) {
+  if (!route) {
+    return;
+  }
+  document.title = route.title ?? starterTitle;
+
+  const meta = route.meta && typeof route.meta === 'object' ? route.meta : {};
+  const seo = route.seo && typeof route.seo === 'object' ? route.seo : {};
+
+  setRouteMetaDescription(typeof meta.description === 'string' ? meta.description : '');
+  setRouteCanonical(typeof seo.canonical === 'string' ? seo.canonical : '');
+  setRouteRobots(typeof seo.robots === 'string' ? seo.robots : '');
+
+  if (typeof meta.lang === 'string' && meta.lang.trim()) {
+    document.documentElement.setAttribute('lang', meta.lang.trim());
+  } else if (starterDocumentLang) {
+    document.documentElement.setAttribute('lang', starterDocumentLang);
+  } else {
+    document.documentElement.removeAttribute('lang');
+  }
+
+  if (typeof meta.dir === 'string' && meta.dir.trim()) {
+    document.documentElement.setAttribute('dir', meta.dir.trim());
+  } else if (starterDocumentDir) {
+    document.documentElement.setAttribute('dir', starterDocumentDir);
+  } else {
+    document.documentElement.removeAttribute('dir');
+  }
+}
+
+function clearRouteDocumentHead() {
+  document.title = starterTitle;
+  if (document.head) {
+    for (const el of document.head.querySelectorAll(`[${BRACKETS_ROUTE_HEAD_MARK}]`)) {
+      el.remove();
+    }
+  }
+  if (starterDocumentLang) {
+    document.documentElement.setAttribute('lang', starterDocumentLang);
+  } else {
+    document.documentElement.removeAttribute('lang');
+  }
+  if (starterDocumentDir) {
+    document.documentElement.setAttribute('dir', starterDocumentDir);
+  } else {
+    document.documentElement.removeAttribute('dir');
   }
 }
 
@@ -3020,9 +3147,9 @@ function restoreStarterShell() {
   }
 
   cleanupActiveLogic();
+  clearRouteDocumentHead();
   root.innerHTML = starterMarkup;
   currentShell = 'starter';
-  document.title = starterTitle;
   observeFrameworkDom();
 }
 
@@ -3080,7 +3207,7 @@ async function renderRoute(pathname, options = {}) {
     ...payload.route,
     params: payload.params ?? {}
   };
-  document.title = payload.route?.title ?? starterTitle;
+  applyRouteDocumentHead(payload.route);
   observeFrameworkDom();
   await applyFrameworkDirectives(root);
 
@@ -3515,6 +3642,8 @@ async function bootstrap() {
   const root = rootElement();
   starterMarkup = root?.innerHTML ?? '';
   starterTitle = document.title;
+  starterDocumentLang = document.documentElement.getAttribute('lang') ?? '';
+  starterDocumentDir = document.documentElement.getAttribute('dir') ?? '';
 
   exposeRuntime(frameworkConfig, embeddedHost);
   setTextAll('[data-brx-local-origin]', embeddedHost?.addresses?.localOrigin ?? embeddedHost?.origin ?? window.location.origin);

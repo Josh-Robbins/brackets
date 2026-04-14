@@ -4,7 +4,7 @@
 <div class="brx-splash">
   <div class="brx-hero">
     <div class="brx-topbar">
-      <a class="brx-brand" href="/" aria-label="Brackets — home">
+      <a class="brx-brand" href="/">
         <span class="brx-brand-mark"><img src="/app/logo-mark.svg" alt="" width="64" height="64" decoding="async" /></span>
         <span class="brx-brand-copy">
           <strong>Brackets</strong>
@@ -22,7 +22,9 @@
     <div class="brx-eyebrow">v0.95.0 &middot; Embedded host</div>
 
     <div class="brx-wordmark-wrap">
-      <h1 class="brx-wordmark"><img src="/app/logo.svg" alt="Brackets" style="width:100%;height:auto;" /></h1>
+      <div class="brx-wordmark" role="img" aria-label="Brackets">
+        <img src="/app/logo.svg" alt="" style="width:100%;height:auto;" />
+      </div>
     </div>
 
     <div class="brx-copy">
@@ -61,7 +63,7 @@
     </div>
 
     <div class="brx-hero-dock" id="brx-live" :state="{ tab: 'scene' }">
-      <div class="brx-tablist" role="tablist" aria-label="Hero panels">
+      <div class="brx-tablist" role="toolbar" aria-label="Hero panels">
         <button type="button" class="brx-tab" :set.aria-pressed="tab === 'scene'" @click="mutate('tab', 'scene')">Scene</button>
         <button type="button" class="brx-tab" :set.aria-pressed="tab === 'live'" @click="mutate('tab', 'live')">Live data</button>
       </div>

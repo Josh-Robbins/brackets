@@ -818,6 +818,16 @@ The next concrete work in this repo should be:
 6. Add a host-adapter contract for Tauri and C# / WebView2-style hosts.
 7. Decide and document the worker strategy before worker-like code paths appear ad hoc.
 
+## Release and demo verification
+
+Before tagging a release:
+
+- Run `deno test tests/test.js --allow-all` locally (same as CI).
+- Load the configured entry (for example `framework/demo`) at `/` and confirm a single routed mount tree (no duplicated layout shells or duplicate element `id`s).
+- Confirm route metadata: after navigation, `document.title` and `meta[name="description"]` match the active route where provided in the `.view` manifest.
+- **Manual QA (demo live data):** on the demo home page, open the “Live data” hero panel, exercise save/update flows for the sample note field, and confirm storage-backed behavior with no console errors. Automated tests cover storage and SSE primitives; this step confirms the full in-browser UX.
+- Optional later: run Lighthouse (or another a11y/SEO auditor) in CI against the demo with fixed budgets—adds Chromium download time and flake risk, so it is not part of the default workflow yet.
+
 ## Done Means
 
 The path forward is aligned when all of this is true:

@@ -240,6 +240,33 @@ Session rule:
 - in that case Brackets should update only the `:mount` region instead of replacing the whole routed page container
 - `read()` stays on the same runtime path so live SSE updates and partial DOM updates work together cleanly
 
+### Route metadata in the document
+
+On client-side navigation, the runtime reconciles the active route into the live document:
+
+| Source | Applied to |
+| --- | --- |
+| `route.title` | `document.title` |
+| `meta.description` | `<meta name="description">` |
+| `meta.lang` | `<html lang>` |
+| `meta.dir` | `<html dir>` |
+| `seo.canonical` | `<link rel="canonical" href>` (absolute URL; relative values resolve against the page origin) |
+| `seo.robots` | `<meta name="robots" content>` |
+
+Tags created or updated for routes carry `data-brackets-route` so they stay distinct from any static tags in the entry `index.html`. Restoring the starter shell clears those managed tags and resets `lang` / `dir` to the entry document’s initial values.
+
+### Production-oriented HTTP defaults
+
+The embedded host sends a baseline set of safe response headers on every reply. You can extend or override parts of that set under `security.headers` in `config.yaml`:
+
+| Key | Role |
+| --- | --- |
+| `contentSecurityPolicy` | Optional `Content-Security-Policy` value. The stock entry HTML uses inline scripts and an import map; a strict policy usually needs nonces or refactors—validate in a staging build. |
+| `strictTransportSecurity` | Optional `Strict-Transport-Security` value. Applied only when the connection is HTTPS (`req.socket.encrypted`). |
+| `permissionsPolicy` | Optional override for `Permissions-Policy` (defaults still restrict camera, microphone, and geolocation when unset). |
+
+JSON responses from `__brackets` endpoints use `Cache-Control: no-store` so route payloads and RPC results are not cached by shared caches.
+
 ### `.api` helper surface
 
 `.api` modules stay backend agnostic by receiving a thin transport helper instead of a backend-framework-specific SDK.

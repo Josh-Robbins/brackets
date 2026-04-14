@@ -110,6 +110,11 @@ const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     storage: {
       keyEnv: 'BRACKETS_DATA_KEY',
       pbkdf2Iterations: 250000
+    },
+    headers: {
+      contentSecurityPolicy: '',
+      strictTransportSecurity: '',
+      permissionsPolicy: ''
     }
   },
   health: {
@@ -321,6 +326,7 @@ function normalizeBracketsConfig(rawConfig = {}) {
   const rawSplash = raw.splash && typeof raw.splash === 'object' ? raw.splash : {};
   const rawSecurity = raw.security && typeof raw.security === 'object' ? raw.security : {};
   const rawStorage = rawSecurity.storage && typeof rawSecurity.storage === 'object' ? rawSecurity.storage : {};
+  const rawSecurityHeaders = rawSecurity.headers && typeof rawSecurity.headers === 'object' ? rawSecurity.headers : {};
   const rawHealth = raw.health && typeof raw.health === 'object' ? raw.health : {};
   const rawExternal = raw.external && typeof raw.external === 'object' ? raw.external : {};
   const rawWatch = raw.watch && typeof raw.watch === 'object' ? raw.watch : {};
@@ -361,6 +367,11 @@ function normalizeBracketsConfig(rawConfig = {}) {
       storage: {
         keyEnv: String(rawStorage.keyEnv ?? defaults.security.storage.keyEnv).trim() || defaults.security.storage.keyEnv,
         pbkdf2Iterations: Math.max(1, numberOrFallback(rawStorage.pbkdf2Iterations, defaults.security.storage.pbkdf2Iterations))
+      },
+      headers: {
+        contentSecurityPolicy: String(rawSecurityHeaders.contentSecurityPolicy ?? defaults.security.headers.contentSecurityPolicy ?? '').trim(),
+        strictTransportSecurity: String(rawSecurityHeaders.strictTransportSecurity ?? defaults.security.headers.strictTransportSecurity ?? '').trim(),
+        permissionsPolicy: String(rawSecurityHeaders.permissionsPolicy ?? defaults.security.headers.permissionsPolicy ?? '').trim()
       }
     },
     health: {
@@ -1070,9 +1081,12 @@ async function discoverBracketsApp(packageRoot, entryRoot, config) {
     const inferredPagePath = viewFile
       .replace(`${path.sep}views${path.sep}`, `${path.sep}pages${path.sep}`)
       .replace(/\.view$/i, '.html');
-    const inferredLayoutPath = viewFile
-      .replace(`${path.sep}views${path.sep}`, `${path.sep}layouts${path.sep}`)
-      .replace(/\.view$/i, '.html');
+    const underViewsTree = viewFile.includes(`${path.sep}views${path.sep}`);
+    const inferredLayoutPath = underViewsTree
+      ? viewFile
+          .replace(`${path.sep}views${path.sep}`, `${path.sep}layouts${path.sep}`)
+          .replace(/\.view$/i, '.html')
+      : null;
     const htmlFile = resolveAppReference(appRoot, viewFile, manifest.html ?? null, [
       viewFile.replace(/\.view$/i, '.html'),
       inferredPagePath,
@@ -1083,9 +1097,12 @@ async function discoverBracketsApp(packageRoot, entryRoot, config) {
       viewFile.replace(`${path.sep}views${path.sep}`, `${path.sep}logic${path.sep}`).replace(/\.view$/i, '.logic'),
       path.join(appRoot, `${basename}.logic`)
     ]);
-    const layoutFile = resolveAppReference(appRoot, viewFile, manifest.layout ?? null, [
-      inferredLayoutPath
-    ]);
+    const layoutFile = resolveAppReference(
+      appRoot,
+      viewFile,
+      manifest.layout ?? null,
+      inferredLayoutPath ? [inferredLayoutPath] : []
+    );
     const aliases = [
       ...(Array.isArray(manifest.aliases) ? manifest.aliases : []),
       ...(manifest.alias ? [manifest.alias] : [])
@@ -1249,6 +1266,16 @@ async function resolveTemplateMarkup(snapshot, entryRoot, reference, fromRelativ
   return resolved;
 }
 
+function effectiveLayoutFileForRoute(route) {
+  if (!route?.layoutFile || !existsSync(route.layoutFile)) {
+    return null;
+  }
+  if (route.htmlFile && path.resolve(route.layoutFile) === path.resolve(route.htmlFile)) {
+    return null;
+  }
+  return route.layoutFile;
+}
+
 async function renderRouteMarkup(route) {
   if (route.redirectTo) {
     return {
@@ -1261,16 +1288,16 @@ async function renderRouteMarkup(route) {
     throw new Error(`Missing html file for route ${route.route}`);
   }
 
+  const layoutFileResolved = effectiveLayoutFileForRoute(route);
+
   const pageInfo = await stat(route.htmlFile);
-  const layoutInfo = route.layoutFile && existsSync(route.layoutFile)
-    ? await stat(route.layoutFile)
-    : null;
+  const layoutInfo = layoutFileResolved ? await stat(layoutFileResolved) : null;
   const cacheKey = [
     route.route,
     route.htmlFile,
     Number(pageInfo.mtimeMs ?? 0),
     Number(pageInfo.size ?? 0),
-    route.layoutFile ?? '',
+    layoutFileResolved ?? '',
     Number(layoutInfo?.mtimeMs ?? 0),
     Number(layoutInfo?.size ?? 0)
   ].join(':');
@@ -1281,14 +1308,14 @@ async function renderRouteMarkup(route) {
 
   const pageHtml = await readText(route.htmlFile);
   const mountHtml = transformHtmlSyntax(pageHtml);
-  const source = route.layoutFile
-    ? composeLayout(await readText(route.layoutFile), pageHtml)
+  const source = layoutFileResolved
+    ? composeLayout(await readText(layoutFileResolved), pageHtml)
     : pageHtml;
 
   const rendered = {
     html: transformHtmlSyntax(source),
     mountHtml,
-    layoutPath: route.layoutRelative ? `/${route.layoutRelative}` : null
+    layoutPath: layoutFileResolved && route.layoutRelative ? `/${route.layoutRelative}` : null
   };
   ROUTE_MARKUP_CACHE.set(cacheKey, rendered);
   return rendered;
@@ -2109,17 +2136,44 @@ function buildFeedXml(config, origin, snapshot) {
   ].join('\n');
 }
 
-function send(res, status, contentType, body, extraHeaders = {}) {
+function buildResponseHeaders(req, config) {
+  const headers = { ...DEFAULT_RESPONSE_HEADERS };
+  const h = config?.security?.headers;
+  if (h && typeof h === 'object') {
+    if (typeof h.contentSecurityPolicy === 'string' && h.contentSecurityPolicy.trim()) {
+      headers['Content-Security-Policy'] = h.contentSecurityPolicy.trim();
+    }
+    if (
+      req?.socket?.encrypted === true
+      && typeof h.strictTransportSecurity === 'string'
+      && h.strictTransportSecurity.trim()
+    ) {
+      headers['Strict-Transport-Security'] = h.strictTransportSecurity.trim();
+    }
+    if (typeof h.permissionsPolicy === 'string' && h.permissionsPolicy.trim()) {
+      headers['Permissions-Policy'] = h.permissionsPolicy.trim();
+    }
+  }
+  return headers;
+}
+
+function writeHttpResponse(res, status, contentType, body, extraHeaders = {}, requestContext = null) {
+  const base = requestContext?.req && requestContext?.config
+    ? buildResponseHeaders(requestContext.req, requestContext.config)
+    : { ...DEFAULT_RESPONSE_HEADERS };
   res.writeHead(status, {
-    ...DEFAULT_RESPONSE_HEADERS,
+    ...base,
     'Content-Type': contentType,
     ...extraHeaders
   });
   res.end(body);
 }
 
-function sendJson(res, status, payload, extraHeaders = {}) {
-  send(res, status, 'application/json; charset=utf-8', json(payload), extraHeaders);
+function sendJson(res, status, payload, extraHeaders = {}, requestContext = null) {
+  writeHttpResponse(res, status, 'application/json; charset=utf-8', json(payload), {
+    'Cache-Control': 'no-store',
+    ...extraHeaders
+  }, requestContext);
 }
 
 function createFrameworkError(statusCode, code, message, options = {}) {
@@ -2133,7 +2187,7 @@ function createFrameworkError(statusCode, code, message, options = {}) {
   return error;
 }
 
-function sendFrameworkError(res, error, fallbackRequestId = '') {
+function sendFrameworkError(res, error, fallbackRequestId = '', requestContext = null) {
   const statusCode = Number(error?.statusCode) || 500;
   const requestId = String(error?.requestId ?? fallbackRequestId ?? '');
   const payload = {
@@ -2151,7 +2205,7 @@ function sendFrameworkError(res, error, fallbackRequestId = '') {
   if (error?.exposeDetails === true && error?.details && typeof error.details === 'object') {
     payload.details = error.details;
   }
-  sendJson(res, statusCode, payload);
+  sendJson(res, statusCode, payload, {}, requestContext);
 }
 
 function requireCsrf(req, expectedToken, requestId) {
@@ -2544,16 +2598,21 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
 
   const server = http.createServer(async (req, res) => {
     const requestId = crypto.randomBytes(8).toString('hex');
+    const requestContext = { req, config };
+    const respond = {
+      send: (status, contentType, body, extraHeaders = {}) => writeHttpResponse(res, status, contentType, body, extraHeaders, requestContext),
+      sendJson: (status, payload, extraHeaders = {}) => sendJson(res, status, payload, extraHeaders, requestContext)
+    };
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1');
 
       if (url.pathname === '/__brackets/dev-reload') {
         if (!liveReload) {
-          send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+          respond.send(404, 'text/plain; charset=utf-8', 'Not found');
           return;
         }
         if (req.method !== 'GET') {
-          send(res, 405, 'text/plain; charset=utf-8', 'Method not allowed');
+          respond.send(405, 'text/plain; charset=utf-8', 'Method not allowed');
           return;
         }
         res.writeHead(200, {
@@ -2577,27 +2636,27 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       hostContract = buildHostContract(packageRoot, origin, config, addresses, appSnapshot, liveReload);
 
       if (url.pathname === '/framework/runtime.js') {
-        send(res, 200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_RUNTIME_PATH));
+        respond.send(200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_RUNTIME_PATH));
         return;
       }
 
       if (url.pathname === '/framework/datastar.js') {
-        send(res, 200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_DATASTAR_PATH));
+        respond.send(200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_DATASTAR_PATH));
         return;
       }
 
       if (url.pathname === '/framework/syntax.js') {
-        send(res, 200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_SYNTAX_PATH));
+        respond.send(200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_SYNTAX_PATH));
         return;
       }
 
       if (url.pathname === '/framework/version.js') {
-        send(res, 200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_VERSION_PATH));
+        respond.send(200, 'text/javascript; charset=utf-8', await readText(FRAMEWORK_VERSION_PATH));
         return;
       }
 
       if (url.pathname.startsWith('/framework/embedded/') || url.pathname.startsWith('/framework/host/')) {
-        send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+        respond.send(404, 'text/plain; charset=utf-8', 'Not found');
         return;
       }
 
@@ -2605,18 +2664,18 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       const entryFaviconPath = entryAssetPath(entryRoot.folder, 'favicon.svg');
 
       if (url.pathname === entryLogoPath || url.pathname === '/framework/logo.svg') {
-        send(res, 200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'logo.svg')));
+        respond.send(200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'logo.svg')));
         return;
       }
 
       if (url.pathname === entryFaviconPath || url.pathname === '/framework/favicon.svg') {
-        send(res, 200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'favicon.svg')));
+        respond.send(200, 'image/svg+xml', await readText(path.join(entryRoot.absolutePath, 'app', 'favicon.svg')));
         return;
       }
 
       const entrySplashPath = entryAssetPath(entryRoot.folder, 'splash.html');
       if (url.pathname === entrySplashPath) {
-        send(res, 200, 'text/html; charset=utf-8', await shellHtml({
+        respond.send(200, 'text/html; charset=utf-8', await shellHtml({
           csrfToken,
           session,
           host: hostContract,
@@ -2629,17 +2688,17 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/config.json') {
-        sendJson(res, 200, config);
+        respond.sendJson(200, config);
         return;
       }
 
       if (url.pathname === '/config.yaml' || url.pathname === '/config.yml') {
-        send(res, 200, 'text/yaml; charset=utf-8', buildBracketsConfigYaml(config));
+        respond.send(200, 'text/yaml; charset=utf-8', buildBracketsConfigYaml(config));
         return;
       }
 
       if (url.pathname === '/config/brackets.json') {
-        sendJson(res, 200, {
+        respond.sendJson(200, {
           framework: 'Brackets',
           version: BRACKETS_VERSION,
           branding: config.branding,
@@ -2677,37 +2736,37 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/config/brackets.yaml') {
-        send(res, 200, 'text/yaml; charset=utf-8', buildBracketsConfigYaml(config));
+        respond.send(200, 'text/yaml; charset=utf-8', buildBracketsConfigYaml(config));
         return;
       }
 
       if (url.pathname === '/config/config.js' && existsSync(path.join(packageRoot, 'config', 'config.js'))) {
-        send(res, 200, 'text/javascript; charset=utf-8', await readText(path.join(packageRoot, 'config', 'config.js')));
+        respond.send(200, 'text/javascript; charset=utf-8', await readText(path.join(packageRoot, 'config', 'config.js')));
         return;
       }
 
       if (url.pathname === '/manifest.webmanifest') {
-        sendJson(res, 200, buildWebManifest(config, origin, entryRoot.folder));
+        respond.sendJson(200, buildWebManifest(config, origin, entryRoot.folder));
         return;
       }
 
       if (url.pathname === '/robots.txt' && existsSync(robotsPath)) {
-        send(res, 200, 'text/plain; charset=utf-8', await readText(robotsPath));
+        respond.send(200, 'text/plain; charset=utf-8', await readText(robotsPath));
         return;
       }
 
       if (url.pathname === '/sitemap.xml') {
-        send(res, 200, 'application/xml; charset=utf-8', buildSitemapXml(origin, appSnapshot));
+        respond.send(200, 'application/xml; charset=utf-8', buildSitemapXml(origin, appSnapshot));
         return;
       }
 
       if (url.pathname === '/feed.xml') {
-        send(res, 200, 'application/rss+xml; charset=utf-8', buildFeedXml(config, origin, appSnapshot));
+        respond.send(200, 'application/rss+xml; charset=utf-8', buildFeedXml(config, origin, appSnapshot));
         return;
       }
 
       if (url.pathname === '/README.md' && existsSync(readmePath)) {
-        send(res, 200, 'text/markdown; charset=utf-8', await readText(readmePath));
+        respond.send(200, 'text/markdown; charset=utf-8', await readText(readmePath));
         return;
       }
 
@@ -2716,12 +2775,12 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         try {
           decodedPathname = decodeURIComponent(url.pathname);
         } catch {
-          send(res, 400, 'text/plain; charset=utf-8', 'Bad request');
+          respond.send(400, 'text/plain; charset=utf-8', 'Bad request');
           return;
         }
         const relative = decodedPathname.replace(/^\/docs\/?/, '').replace(/\\/g, '/');
         if (!relative || relative.includes('..')) {
-          sendJson(res, 404, {
+          respond.sendJson(404, {
             ok: false,
             error: `Not found: ${url.pathname}`,
             code: 'BRACKETS_NOT_FOUND',
@@ -2738,7 +2797,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
             `docs:${url.pathname}`
           );
         } catch {
-          sendJson(res, 404, {
+          respond.sendJson(404, {
             ok: false,
             error: `Not found: ${url.pathname}`,
             code: 'BRACKETS_NOT_FOUND',
@@ -2750,11 +2809,11 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (STATIC_SAFE_EXTENSIONS.has(extension) && existsSync(staticTarget)) {
           const fileInfo = await stat(staticTarget);
           if (fileInfo.isFile()) {
-            send(res, 200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
+            respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
             return;
           }
         }
-        sendJson(res, 404, {
+        respond.sendJson(404, {
           ok: false,
           error: `Not found: ${url.pathname}`,
           code: 'BRACKETS_NOT_FOUND',
@@ -2764,14 +2823,14 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/__brackets/session') {
-        sendJson(res, 200, session, {
+        respond.sendJson(200, session, {
           'Set-Cookie': cookieHeader
         });
         return;
       }
 
       if (url.pathname === '/__brackets/host') {
-        sendJson(res, 200, hostContract);
+        respond.sendJson(200, hostContract);
         return;
       }
 
@@ -2781,13 +2840,13 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!match) {
           sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_ROUTE_NOT_FOUND', `Unknown Brackets route: ${targetPath}`, {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
         const authStatus = routeAuthStatus(match.route, session);
         if (authStatus !== 'allowed') {
-          sendJson(res, 200, {
+          respond.sendJson(200, {
             ok: true,
             path: targetPath,
             params: match.params,
@@ -2800,7 +2859,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         }
 
         if (match.route.redirectTo) {
-          sendJson(res, 200, {
+          respond.sendJson(200, {
             ok: true,
             path: targetPath,
             params: match.params,
@@ -2812,7 +2871,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         }
 
         const rendered = await renderRouteMarkup(match.route);
-        sendJson(res, 200, {
+        respond.sendJson(200, {
           ok: true,
           path: targetPath,
           params: match.params,
@@ -2830,7 +2889,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!['logic', 'data', 'api'].includes(kind) || !file) {
           sendFrameworkError(res, createFrameworkError(400, 'BRACKETS_INVALID_MODULE_REQUEST', 'Expected kind=logic|data|api and file=...', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -2843,11 +2902,11 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!validExtension || !existsSync(candidate)) {
           sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_MODULE_NOT_FOUND', `Unknown Brackets module: ${file}`, {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
-        send(res, 200, 'text/javascript; charset=utf-8', wrapModuleForBrowser(await readText(candidate)));
+        respond.send(200, 'text/javascript; charset=utf-8', wrapModuleForBrowser(await readText(candidate)));
         return;
       }
 
@@ -2857,7 +2916,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!reference) {
           sendFrameworkError(res, createFrameworkError(400, 'BRACKETS_TEMPLATE_REF_REQUIRED', 'Expected ref=...', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -2865,11 +2924,11 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!template) {
           sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_TEMPLATE_NOT_FOUND', `Unknown Brackets template: ${reference}`, {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
-        sendJson(res, 200, {
+        respond.sendJson(200, {
           ok: true,
           path: `/${template.relativePath}`,
           stamp: template.stamp,
@@ -2882,7 +2941,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (req.method !== 'POST') {
           sendFrameworkError(res, createFrameworkError(405, 'BRACKETS_METHOD_NOT_ALLOWED', 'POST required', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -2901,7 +2960,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!moduleDescriptor) {
           sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_MODULE_NOT_FOUND', 'Expected a valid data or api module.', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -2929,7 +2988,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
           await broadcastLiveUpdates(kind, moduleId);
         }
 
-        sendJson(res, 200, {
+        respond.sendJson(200, {
           ok: true,
           result,
           invalidate: {
@@ -2952,7 +3011,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (req.method !== 'GET') {
           sendFrameworkError(res, createFrameworkError(405, 'BRACKETS_METHOD_NOT_ALLOWED', 'GET required', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -2969,7 +3028,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         if (!moduleDescriptor) {
           sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_MODULE_NOT_FOUND', 'Expected a valid data or api module.', {
             requestId
-          }), requestId);
+          }), requestId, requestContext);
           return;
         }
 
@@ -3070,12 +3129,12 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/.well-known/brackets-host.json') {
-        sendJson(res, 200, hostContract);
+        respond.sendJson(200, hostContract);
         return;
       }
 
       if (url.pathname === '/.well-known/brackets-app.json') {
-        sendJson(res, 200, {
+        respond.sendJson(200, {
           framework: 'Brackets',
           version: BRACKETS_VERSION,
           appRoot: appSnapshot.appRoot,
@@ -3105,7 +3164,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/service-worker.js') {
-        send(res, 404, 'text/plain; charset=utf-8', 'Not found');
+        respond.send(404, 'text/plain; charset=utf-8', 'Not found');
         return;
       }
 
@@ -3113,7 +3172,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       try {
         decodedPathname = decodeURIComponent(url.pathname);
       } catch {
-        send(res, 400, 'text/plain; charset=utf-8', 'Bad request');
+        respond.send(400, 'text/plain; charset=utf-8', 'Bad request');
         return;
       }
       const staticTarget = ensureWithinRoot(
@@ -3125,14 +3184,14 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       if (STATIC_SAFE_EXTENSIONS.has(extension) && existsSync(staticTarget)) {
         const fileInfo = await stat(staticTarget);
         if (fileInfo.isFile()) {
-          send(res, 200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
+          respond.send(200, MIME_TYPES.get(extension) ?? 'application/octet-stream', await readStaticBody(staticTarget));
           return;
         }
       }
 
       if (shouldServeShell(url.pathname) && existsSync(entryRoot.indexPath)) {
         const source = await readText(entryRoot.indexPath);
-        send(res, 200, 'text/html; charset=utf-8', transformHtmlSyntax(hydratePackagedIndexHtml(source, {
+        respond.send(200, 'text/html; charset=utf-8', transformHtmlSyntax(hydratePackagedIndexHtml(source, {
           csrfToken,
           session,
           host: hostContract,
@@ -3143,7 +3202,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         return;
       }
 
-      sendJson(res, 404, {
+      respond.sendJson(404, {
         ok: false,
         error: `Not found: ${url.pathname}`,
         code: 'BRACKETS_NOT_FOUND',
@@ -3153,7 +3212,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       if (Number(error?.statusCode) >= 500 || !Number(error?.statusCode)) {
         console.error(`[Brackets ${requestId}]`, error);
       }
-      sendFrameworkError(res, error, requestId);
+      sendFrameworkError(res, error, requestId, requestContext);
     }
   });
 

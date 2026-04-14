@@ -356,6 +356,48 @@ Deno.test('framework honors entry.folder and serves that folder index.html first
   }
 });
 
+Deno.test('flat app view without manifest layout does not double-compose page as layout', async () => {
+  const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-flat-view-' });
+
+  try {
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 0,
+      entry: {
+        folder: '.',
+        route: '/',
+        autoStart: false
+      }
+    }, null, 2));
+
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body><div id="root"></div></body></html>');
+    await writeText(join(tempRoot, 'app', 'home', 'home.view'), [
+      'page({',
+      "  id: 'home',",
+      "  route: '/',",
+      "  title: 'Flat',",
+      "  html: '@app/home/home.html',",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'home', 'home.html'), '<div id="flat-route-sentinel" class="once">Flat route page</div>');
+
+    await withServer(tempRoot, async ({ url }) => {
+      const contract = await fetch(`${url}/.well-known/brackets-app.json`).then((response) => response.json());
+      const home = contract.routes.find((r) => r.route === '/');
+      assert(home, 'contract should include / route');
+      assertEqual(home.layoutPath, null, 'flat view should not infer layout from page html path');
+
+      const renderPayload = await fetch(`${url}/__brackets/render?path=%2F`).then((response) => response.json());
+      assertEqual(renderPayload.ok, true, 'render should succeed');
+      assertEqual(renderPayload.layoutPath, null, 'render payload should not report a layout path');
+      const sentinelCount = (renderPayload.html.match(/flat-route-sentinel/g) ?? []).length;
+      assertEqual(sentinelCount, 1, 'page markup should appear once in rendered html');
+    });
+  } finally {
+    await Deno.remove(tempRoot, { recursive: true });
+  }
+});
+
 Deno.test('framework discovers routes and wires html, .data, and .api through the built-in host', async () => {
   const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-app-contract-' });
 
@@ -541,6 +583,7 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(runtimeSource.includes("'x-brackets-csrf'"), 'runtime RPC should send the active CSRF token');
       assert(runtimeSource.includes('sessionRetryAttempted'), 'runtime should retry protected-route session recovery once before redirecting');
       assert(runtimeSource.includes('scope(element = null, event = null)'), 'runtime should expose a scope bridge for Datastar-backed expressions');
+      assert(runtimeSource.includes('function applyRouteDocumentHead'), 'runtime should reconcile route meta and seo into document head');
       assert(runtimeSource.includes('function patchSharedLayoutAreas'), 'runtime should patch same-layout area fills during partial route swaps');
       assert(runtimeSource.includes('async optimistic(patch, task)'), 'runtime state helpers should expose optimistic updates');
       assert(runtimeSource.includes('runtimeValuesEqual'), 'optimistic state rollback should compare the live value before reverting over newer state');

@@ -83,6 +83,13 @@ security:
   # trusted  = only for intentionally trusted HTML
   html: sanitize
 
+  # Optional extra HTTP response headers (merged with host defaults). Strict CSP often needs
+  # nonces or moving inline bootstrapping; test behind HTTPS before enabling HSTS.
+  # headers:
+  #   contentSecurityPolicy: "default-src 'self'"
+  #   strictTransportSecurity: "max-age=63072000; includeSubDomains"
+  #   permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
   storage:
     # Environment variable name used for encrypted local persistence.
     keyEnv: BRACKETS_DATA_KEY

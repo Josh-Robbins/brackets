@@ -9,6 +9,9 @@ page({
   meta: {
     description: 'Brackets framework demo — HTML first, Datastar underneath.'
   },
+  seo: {
+    canonical: '/'
+  },
   html: '@app/home/home.html',
   data: {
     demo: '@data/demo.data'
