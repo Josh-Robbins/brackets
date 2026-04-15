@@ -118,6 +118,7 @@ const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     headers: {
       contentSecurityPolicy: '',
       contentSecurityPolicyReportOnly: '',
+      cspNonceInlineScripts: false,
       strictTransportSecurity: '',
       permissionsPolicy: '',
       htmlDocumentCacheControl: '',
@@ -378,6 +379,8 @@ function normalizeBracketsConfig(rawConfig = {}) {
       headers: {
         contentSecurityPolicy: String(rawSecurityHeaders.contentSecurityPolicy ?? defaults.security.headers.contentSecurityPolicy ?? '').trim(),
         contentSecurityPolicyReportOnly: String(rawSecurityHeaders.contentSecurityPolicyReportOnly ?? defaults.security.headers.contentSecurityPolicyReportOnly ?? '').trim(),
+        cspNonceInlineScripts: rawSecurityHeaders.cspNonceInlineScripts === true
+          || String(rawSecurityHeaders.cspNonceInlineScripts ?? '').toLowerCase() === 'true',
         strictTransportSecurity: String(rawSecurityHeaders.strictTransportSecurity ?? defaults.security.headers.strictTransportSecurity ?? '').trim(),
         permissionsPolicy: String(rawSecurityHeaders.permissionsPolicy ?? defaults.security.headers.permissionsPolicy ?? '').trim(),
         htmlDocumentCacheControl: String(rawSecurityHeaders.htmlDocumentCacheControl ?? defaults.security.headers.htmlDocumentCacheControl ?? '').trim(),
@@ -870,24 +873,26 @@ function normalizeRouteDependencyToken(value, kind = '') {
 
   const normalizedKind = String(kind ?? '').trim().toLowerCase();
   const explicitPrefix = normalizedKind ? `${normalizedKind}:` : '';
+  let body = raw;
   if (explicitPrefix && raw.toLowerCase().startsWith(explicitPrefix)) {
-    const sliced = raw.slice(explicitPrefix.length).trim();
-    return sliced || null;
+    body = raw.slice(explicitPrefix.length).trim();
   }
 
-  const cleaned = raw
+  const cleaned = body
     .replace(/^@app\/(?:data|api)\//i, '')
     .replace(/^\/?app\/(?:data|api)\//i, '')
     .replace(/^\.\/+/, '')
     .replace(/\.(?:data|api)$/i, '')
-    .trim();
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
 
   if (!cleaned) {
     return null;
   }
 
-  const tail = cleaned.split('/').pop()?.trim() ?? '';
-  return tail || cleaned;
+  return cleaned;
 }
 
 function normalizeRouteDependencies(value, kind = '') {
@@ -1036,6 +1041,36 @@ function appModuleRecord(kind, module) {
   };
 }
 
+function collectRouteDeclaredModuleIds(snapshot) {
+  const data = new Set();
+  const api = new Set();
+  for (const route of snapshot?.routes ?? []) {
+    for (const id of route.data ?? []) {
+      data.add(id);
+    }
+    for (const id of route.api ?? []) {
+      api.add(id);
+    }
+  }
+  return { data, api };
+}
+
+function routeFilteredModuleRecords(snapshot) {
+  const { data, api } = collectRouteDeclaredModuleIds(snapshot);
+  return {
+    data: snapshot.dataModules.filter((module) => data.has(module.id)).map((module) => appModuleRecord('data', module)),
+    api: snapshot.apiModules.filter((module) => api.has(module.id)).map((module) => appModuleRecord('api', module))
+  };
+}
+
+function injectInlineScriptNonces(html, nonce) {
+  const safe = String(nonce ?? '').replace(/[^a-zA-Z0-9+/=_-]/g, '');
+  if (!safe) {
+    return html;
+  }
+  return html.replace(/<script(\s)(?![^>]*\bnonce=)/gi, `<script nonce="${safe}"$1`);
+}
+
 function createRouteMatchers(routes) {
   const matchers = [];
   for (const route of routes) {
@@ -1164,16 +1199,10 @@ async function discoverBracketsApp(packageRoot, entryRoot, config) {
 
   const dataFiles = hasAppRoot ? await listFilesRecursive(path.join(appRoot, 'data'), '.data') : [];
   const apiFiles = hasAppRoot ? await listFilesRecursive(path.join(appRoot, 'api'), '.api') : [];
-  const dataModules = dataFiles.map((filePath) => ({
-    id: path.basename(filePath, '.data'),
-    filePath,
-    relativePath: toPosix(path.relative(entryRoot.absolutePath, filePath))
-  }));
-  const apiModules = apiFiles.map((filePath) => ({
-    id: path.basename(filePath, '.api'),
-    filePath,
-    relativePath: toPosix(path.relative(entryRoot.absolutePath, filePath))
-  }));
+  const dataModules = dataFiles.map((filePath) => discoverDataOrApiModule(appRoot, entryRoot.absolutePath, 'data', filePath));
+  const apiModules = apiFiles.map((filePath) => discoverDataOrApiModule(appRoot, entryRoot.absolutePath, 'api', filePath));
+  assertNoAmbiguousModuleBasenames('data', dataModules);
+  assertNoAmbiguousModuleBasenames('api', apiModules);
 
   return {
     appRoot,
@@ -1195,11 +1224,52 @@ async function discoverBracketsApp(packageRoot, entryRoot, config) {
   };
 }
 
+function discoverDataOrApiModule(appRoot, entryRootAbsolute, kind, filePath) {
+  const ext = kind === 'data' ? '.data' : '.api';
+  const subDir = kind === 'data' ? 'data' : 'api';
+  const baseDir = path.join(appRoot, subDir);
+  const rel = toPosix(path.relative(baseDir, filePath));
+  const id = rel.replace(/\.(data|api)$/i, '').replace(/\/+/g, '/');
+  return {
+    id,
+    basename: path.basename(filePath, ext),
+    filePath,
+    relativePath: toPosix(path.relative(entryRootAbsolute, filePath))
+  };
+}
+
+function assertNoAmbiguousModuleBasenames(kind, modules) {
+  const byBase = new Map();
+  for (const module of modules) {
+    const { basename } = module;
+    if (!byBase.has(basename)) {
+      byBase.set(basename, new Set());
+    }
+    byBase.get(basename).add(module.id);
+  }
+  const lines = [];
+  for (const [basename, ids] of byBase) {
+    if (ids.size > 1) {
+      lines.push(`${kind}: basename "${basename}" used by ${[...ids].join(', ')}`);
+    }
+  }
+  if (lines.length) {
+    throw new Error(`Brackets module basename collision under app/${kind}/. Use distinct leaf names or call RPC with full app-relative ids.\n${lines.join('\n')}`);
+  }
+}
+
 function createModuleIndex(modules) {
   const index = new Map();
+  const basenameHits = new Map();
+  for (const module of modules) {
+    basenameHits.set(module.basename, (basenameHits.get(module.basename) ?? 0) + 1);
+  }
   for (const module of modules) {
     index.set(module.id, module);
     index.set(module.relativePath, module);
+    if ((basenameHits.get(module.basename) ?? 0) === 1) {
+      index.set(module.basename, module);
+    }
   }
   return index;
 }
@@ -2032,6 +2102,96 @@ function routeAuthRedirect(route, session = null) {
   return redirectTo ? normalizePublicPath(redirectTo) : null;
 }
 
+function denyRpcOrLiveAccess(requestId) {
+  throw createFrameworkError(403, 'BRACKETS_REQUEST_DENIED', 'Brackets refused this request.', {
+    requestId,
+    clientMessage: 'Brackets refused this request.'
+  });
+}
+
+function bracketsAccessLog(event) {
+  try {
+    console.info(JSON.stringify({ channel: 'brackets.access', ...event }));
+  } catch {
+    // Ignore logging failures.
+  }
+}
+
+function moduleCapabilityToken(kind, moduleDescriptor, rawRequestedId) {
+  const raw = String(rawRequestedId ?? moduleDescriptor?.id ?? '').trim();
+  if (moduleDescriptor) {
+    return moduleDescriptor.id;
+  }
+  return normalizeRouteDependencyToken(raw, kind);
+}
+
+function routeDeclaresModuleToken(route, kind, token) {
+  if (!route || !token) {
+    return false;
+  }
+  const field = kind === 'api' ? 'api' : 'data';
+  const deps = Array.isArray(route[field]) ? route[field] : [];
+  return deps.includes(token);
+}
+
+function assertRpcOrLiveAllowed({
+  session,
+  match,
+  kind,
+  moduleDescriptor,
+  rawModuleId,
+  requestId,
+  channel
+}) {
+  if (!match?.route) {
+    bracketsAccessLog({
+      requestId,
+      channel,
+      outcome: 'deny',
+      reason: 'no_route'
+    });
+    denyRpcOrLiveAccess(requestId);
+  }
+
+  const auth = routeAuthStatus(match.route, session);
+  if (auth !== 'allowed') {
+    bracketsAccessLog({
+      requestId,
+      channel,
+      outcome: 'deny',
+      reason: 'auth',
+      routeId: match.route.id ?? null,
+      auth
+    });
+    denyRpcOrLiveAccess(requestId);
+  }
+
+  if (!moduleDescriptor) {
+    bracketsAccessLog({
+      requestId,
+      channel,
+      outcome: 'deny',
+      reason: 'unknown_module',
+      routeId: match.route.id ?? null
+    });
+    denyRpcOrLiveAccess(requestId);
+  }
+
+  const token = moduleCapabilityToken(kind, moduleDescriptor, rawModuleId);
+  if (!routeDeclaresModuleToken(match.route, kind, token)) {
+    bracketsAccessLog({
+      requestId,
+      channel,
+      outcome: 'deny',
+      reason: 'not_declared_on_route',
+      routeId: match.route.id ?? null,
+      kind,
+      module: token
+    });
+    denyRpcOrLiveAccess(requestId);
+  }
+}
+
 function methodLooksMutating(methodName) {
   const name = String(methodName ?? '').trim().toLowerCase();
   if (!name) {
@@ -2191,12 +2351,35 @@ function buildStaticAssetCacheHeaders(config, extension) {
   return { 'Cache-Control': v.trim() };
 }
 
-function buildResponseHeaders(req, config) {
+function buildShellContentSecurityPolicy(nonce) {
+  const n = String(nonce ?? '').replace(/[^a-zA-Z0-9+/=_-]/g, '');
+  if (!n) {
+    return '';
+  }
+  return [
+    "default-src 'self'",
+    `script-src 'nonce-${n}' 'strict-dynamic'`,
+    "connect-src 'self'",
+    "img-src 'self' data: blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ');
+}
+
+function buildResponseHeaders(req, config, requestContext = null) {
   const headers = { ...DEFAULT_RESPONSE_HEADERS };
   const h = config?.security?.headers;
   if (h && typeof h === 'object') {
+    const nonce = requestContext?.shellCspNonce ?? '';
     if (typeof h.contentSecurityPolicy === 'string' && h.contentSecurityPolicy.trim()) {
       headers['Content-Security-Policy'] = h.contentSecurityPolicy.trim();
+    } else if (h.cspNonceInlineScripts === true && nonce) {
+      const built = buildShellContentSecurityPolicy(nonce);
+      if (built) {
+        headers['Content-Security-Policy'] = built;
+      }
     }
     if (typeof h.contentSecurityPolicyReportOnly === 'string' && h.contentSecurityPolicyReportOnly.trim()) {
       headers['Content-Security-Policy-Report-Only'] = h.contentSecurityPolicyReportOnly.trim();
@@ -2217,7 +2400,7 @@ function buildResponseHeaders(req, config) {
 
 function writeHttpResponse(res, status, contentType, body, extraHeaders = {}, requestContext = null) {
   const base = requestContext?.req && requestContext?.config
-    ? buildResponseHeaders(requestContext.req, requestContext.config)
+    ? buildResponseHeaders(requestContext.req, requestContext.config, requestContext)
     : { ...DEFAULT_RESPONSE_HEADERS };
   res.writeHead(status, {
     ...base,
@@ -2679,13 +2862,26 @@ function resolveRobotsTxtPath(packageRoot, entryRoot) {
   return packageRobots;
 }
 
-export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode: devModeOption = false } = {}) {
+export async function createServer({
+  appRoot = PACKAGE_ROOT,
+  port,
+  host,
+  devMode: devModeOption = false,
+  /** Shallow merge into `config.security.headers` after load (e.g. tests enabling `cspNonceInlineScripts`). */
+  securityHeaders = null
+} = {}) {
   const resolvedAppRoot = path.resolve(appRoot);
   const packageRoot = path.basename(resolvedAppRoot).toLowerCase() === 'app'
     ? path.dirname(resolvedAppRoot)
     : resolvedAppRoot;
   const readmePath = path.join(packageRoot, 'README.md');
-  const { config } = await loadBracketsConfig(packageRoot);
+  let { config } = await loadBracketsConfig(packageRoot);
+  if (securityHeaders && typeof securityHeaders === 'object') {
+    config = structuredClone(config);
+    config.security ??= {};
+    config.security.headers ??= {};
+    Object.assign(config.security.headers, securityHeaders);
+  }
   const liveReload = Boolean(devModeOption)
     || (config.watch?.enabled === true && config.watch?.reload === true);
   const entryRoot = resolveEntryFolder(packageRoot, config);
@@ -2879,15 +3075,22 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
 
       const entrySplashPath = entryAssetPath(entryRoot.folder, 'splash.html');
       if (url.pathname === entrySplashPath) {
-        respond.send(200, 'text/html; charset=utf-8', await shellHtml({
+        const splashNonce = config?.security?.headers?.cspNonceInlineScripts === true
+          ? crypto.randomBytes(16).toString('base64url')
+          : '';
+        let splashHtml = await shellHtml({
           csrfToken,
           session,
           host: hostContract,
           appConfig: config,
           entryFolder: entryRoot.folder
-        }), {
-          'Set-Cookie': cookieHeader
         });
+        if (splashNonce) {
+          splashHtml = injectInlineScriptNonces(splashHtml, splashNonce);
+        }
+        writeHttpResponse(res, 200, 'text/html; charset=utf-8', splashHtml, {
+          'Set-Cookie': cookieHeader
+        }, { ...requestContext, shellCspNonce: splashNonce });
         return;
       }
 
@@ -3162,10 +3365,18 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         const match = matchDiscoveredRoute(appSnapshot, routePath);
         const moduleDescriptor = resolveModuleFromSnapshot(appSnapshot, kind, moduleId);
 
-        if (!moduleDescriptor) {
-          sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_MODULE_NOT_FOUND', 'Expected a valid data or api module.', {
-            requestId
-          }), requestId, requestContext);
+        try {
+          assertRpcOrLiveAllowed({
+            session,
+            match,
+            kind,
+            moduleDescriptor,
+            rawModuleId: moduleId,
+            requestId,
+            channel: 'rpc'
+          });
+        } catch (error) {
+          sendFrameworkError(res, error, requestId, requestContext);
           return;
         }
 
@@ -3190,7 +3401,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
           : [];
 
         if (isMutating) {
-          await broadcastLiveUpdates(kind, moduleId);
+          await broadcastLiveUpdates(kind, moduleDescriptor.id);
         }
 
         respond.sendJson(200, {
@@ -3198,7 +3409,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
           result,
           invalidate: {
             kind,
-            module: moduleDescriptor.id ?? moduleId,
+            module: moduleDescriptor.id,
             write: isMutating,
             routes: invalidatedRoutes,
             cacheKeys: isMutating
@@ -3228,14 +3439,24 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         const intervalMs = Math.max(250, Math.min(10000, Number(url.searchParams.get('intervalMs') ?? 1000) || 1000));
         const match = matchDiscoveredRoute(appSnapshot, routePath);
         const moduleDescriptor = resolveModuleFromSnapshot(appSnapshot, kind, moduleId);
-        const subscriberId = `${requestId}:${kind}:${moduleId}:${methodName}:${routePath}`;
 
-        if (!moduleDescriptor) {
-          sendFrameworkError(res, createFrameworkError(404, 'BRACKETS_MODULE_NOT_FOUND', 'Expected a valid data or api module.', {
-            requestId
-          }), requestId, requestContext);
+        try {
+          assertRpcOrLiveAllowed({
+            session,
+            match,
+            kind,
+            moduleDescriptor,
+            rawModuleId: moduleId,
+            requestId,
+            channel: 'live'
+          });
+        } catch (error) {
+          sendFrameworkError(res, error, requestId, requestContext);
           return;
         }
+
+        const canonicalModuleId = moduleDescriptor.id;
+        const subscriberId = `${requestId}:${kind}:${canonicalModuleId}:${methodName}:${routePath}`;
 
         res.writeHead(200, {
           'Content-Type': 'text/event-stream; charset=utf-8',
@@ -3266,7 +3487,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
           running = true;
           try {
             const nextSnapshot = await getSnapshot();
-            const nextModuleDescriptor = resolveModuleFromSnapshot(nextSnapshot, kind, moduleId);
+            const nextModuleDescriptor = resolveModuleFromSnapshot(nextSnapshot, kind, canonicalModuleId);
             if (!nextModuleDescriptor) {
               return;
             }
@@ -3303,14 +3524,14 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
 
         subscribeLiveStream(subscriberId, {
           kind,
-          moduleId,
+          moduleId: canonicalModuleId,
           push: sendSnapshot
         });
 
         emit('open', {
           ok: true,
           kind,
-          module: moduleId,
+          module: canonicalModuleId,
           method: methodName,
           intervalMs
         });
@@ -3339,16 +3560,18 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
       }
 
       if (url.pathname === '/.well-known/brackets-app.json') {
+        const filteredModules = routeFilteredModuleRecords(appSnapshot);
         respond.sendJson(200, {
           framework: 'Brackets',
           version: BRACKETS_VERSION,
+          contractVersion: 2,
           appRoot: appSnapshot.appRoot,
           entryFolder: appSnapshot.entryFolder,
           entryPoint: entryPointPath(appSnapshot.entryFolder),
           routes: appSnapshot.routes.map((route) => routeRecord(route, '/')),
           modules: {
-            data: appSnapshot.dataModules.map((module) => appModuleRecord('data', module)),
-            api: appSnapshot.apiModules.map((module) => appModuleRecord('api', module))
+            data: filteredModules.data,
+            api: filteredModules.api
           },
           router: {
             mode: appSnapshot.routes.length ? 'hybrid' : 'starter',
@@ -3396,17 +3619,23 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
 
       if (shouldServeShell(url.pathname) && existsSync(entryRoot.indexPath)) {
         const source = await readText(entryRoot.indexPath);
+        const shellNonce = config?.security?.headers?.cspNonceInlineScripts === true
+          ? crypto.randomBytes(16).toString('base64url')
+          : '';
         let shellHtmlOut = hydratePackagedIndexHtml(source, {
           csrfToken,
           session,
           host: hostContract,
           appConfig: config
         });
+        if (shellNonce) {
+          shellHtmlOut = injectInlineScriptNonces(shellHtmlOut, shellNonce);
+        }
         shellHtmlOut = injectShellRouteHead(shellHtmlOut, decodedPathname, appSnapshot, origin);
-        respond.send(200, 'text/html; charset=utf-8', transformHtmlSyntax(shellHtmlOut), {
+        writeHttpResponse(res, 200, 'text/html; charset=utf-8', transformHtmlSyntax(shellHtmlOut), {
           ...buildHtmlShellCacheHeaders(req, config),
           'Set-Cookie': cookieHeader
-        });
+        }, { ...requestContext, shellCspNonce: shellNonce });
         return;
       }
 
