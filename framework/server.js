@@ -32,6 +32,8 @@ const STATIC_SAFE_EXTENSIONS = new Set([
   '.svg',
   '.txt',
   '.webmanifest',
+  '.woff',
+  '.woff2',
   '.yaml',
   '.yml'
 ]);
@@ -50,6 +52,8 @@ const MIME_TYPES = new Map([
   ['.svg', 'image/svg+xml'],
   ['.txt', 'text/plain; charset=utf-8'],
   ['.webmanifest', 'application/manifest+json; charset=utf-8'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
   ['.yaml', 'text/yaml; charset=utf-8'],
   ['.yml', 'text/yaml; charset=utf-8']
 ]);
@@ -113,6 +117,7 @@ const DEFAULT_BRACKETS_CONFIG = Object.freeze({
     },
     headers: {
       contentSecurityPolicy: '',
+      contentSecurityPolicyReportOnly: '',
       strictTransportSecurity: '',
       permissionsPolicy: '',
       htmlDocumentCacheControl: '',
@@ -372,6 +377,7 @@ function normalizeBracketsConfig(rawConfig = {}) {
       },
       headers: {
         contentSecurityPolicy: String(rawSecurityHeaders.contentSecurityPolicy ?? defaults.security.headers.contentSecurityPolicy ?? '').trim(),
+        contentSecurityPolicyReportOnly: String(rawSecurityHeaders.contentSecurityPolicyReportOnly ?? defaults.security.headers.contentSecurityPolicyReportOnly ?? '').trim(),
         strictTransportSecurity: String(rawSecurityHeaders.strictTransportSecurity ?? defaults.security.headers.strictTransportSecurity ?? '').trim(),
         permissionsPolicy: String(rawSecurityHeaders.permissionsPolicy ?? defaults.security.headers.permissionsPolicy ?? '').trim(),
         htmlDocumentCacheControl: String(rawSecurityHeaders.htmlDocumentCacheControl ?? defaults.security.headers.htmlDocumentCacheControl ?? '').trim(),
@@ -2192,6 +2198,9 @@ function buildResponseHeaders(req, config) {
     if (typeof h.contentSecurityPolicy === 'string' && h.contentSecurityPolicy.trim()) {
       headers['Content-Security-Policy'] = h.contentSecurityPolicy.trim();
     }
+    if (typeof h.contentSecurityPolicyReportOnly === 'string' && h.contentSecurityPolicyReportOnly.trim()) {
+      headers['Content-Security-Policy-Report-Only'] = h.contentSecurityPolicyReportOnly.trim();
+    }
     if (
       req?.socket?.encrypted === true
       && typeof h.strictTransportSecurity === 'string'
@@ -2269,6 +2278,55 @@ function requireCsrf(req, expectedToken, requestId) {
   const expectedBuffer = Buffer.from(expected, 'utf8');
   if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
     throw createFrameworkError(403, 'BRACKETS_CSRF_MISMATCH', 'Brackets rejected this request because the session token did not match.', {
+      requestId
+    });
+  }
+}
+
+/** Same-origin hints for browser-originated POSTs (layered with CSRF token). Skips when no Origin/Referer/Sec-Fetch (e.g. CLI, tests). */
+function requireBrowserSameOrigin(req, requestId) {
+  const host = String(req.headers.host ?? '').trim();
+  if (!host) {
+    return;
+  }
+
+  const secure = req.socket?.encrypted === true;
+  const expectedOrigin = `${secure ? 'https' : 'http'}://${host}`;
+
+  const secFetchSite = String(req.headers['sec-fetch-site'] ?? '').trim().toLowerCase();
+  if (secFetchSite === 'cross-site') {
+    throw createFrameworkError(403, 'BRACKETS_ORIGIN_MISMATCH', 'Brackets rejected this request because it did not appear to come from the same site.', {
+      requestId
+    });
+  }
+
+  const origin = String(req.headers.origin ?? '').trim();
+  if (origin) {
+    if (origin !== expectedOrigin) {
+      throw createFrameworkError(403, 'BRACKETS_ORIGIN_MISMATCH', 'Brackets rejected this request because the Origin header did not match this host.', {
+        requestId
+      });
+    }
+    return;
+  }
+
+  const referer = String(req.headers.referer ?? '').trim();
+  if (!referer) {
+    return;
+  }
+
+  try {
+    const parsed = new URL(referer);
+    if (`${parsed.protocol}//${parsed.host}` !== expectedOrigin) {
+      throw createFrameworkError(403, 'BRACKETS_ORIGIN_MISMATCH', 'Brackets rejected this request because the Referer did not match this origin.', {
+        requestId
+      });
+    }
+  } catch (error) {
+    if (error?.code === 'BRACKETS_ORIGIN_MISMATCH') {
+      throw error;
+    }
+    throw createFrameworkError(403, 'BRACKETS_ORIGIN_MISMATCH', 'Brackets rejected this request because the Referer could not be validated.', {
       requestId
     });
   }
@@ -3092,6 +3150,7 @@ export async function createServer({ appRoot = PACKAGE_ROOT, port, host, devMode
         }
 
         requireCsrf(req, csrfToken, requestId);
+        requireBrowserSameOrigin(req, requestId);
         const payload = await readJsonRequest(req);
         const kind = payload.kind;
         validateModuleKind(kind, requestId);
