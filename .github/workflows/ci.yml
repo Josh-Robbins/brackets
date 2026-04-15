@@ -1,4 +1,4 @@
-# Interacts with: tests/test.js, Deno — single gate: jsr + tests/test.js only (no npm: browser deps)
+# Interacts with: tests/test.js, tests/browser_demo_test.js, Deno + Playwright (browser gate)
 name: CI
 
 on:
@@ -16,6 +16,21 @@ jobs:
           deno-version: v2.x
       - name: Run framework tests (demo RPC + robots + contracts)
         run: deno test tests/test.js --allow-all
+
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright Chromium (matches npm:playwright@1.49.1)
+        run: npx playwright@1.49.1 install chromium --with-deps
+      - name: Browser smoke (demo Live tab + RPC + console)
+        run: deno test tests/browser_demo_test.js --allow-all
 
   release-artifacts:
     if: hashFiles('release/**') != ''

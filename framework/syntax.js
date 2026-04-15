@@ -201,6 +201,49 @@ const IDENTIFIER_GLOBALS = new Set([
   'async'
 ]);
 
+/** ECMAScript keywords / reserved words that must not become `$keyword` in transformed expressions. */
+const JAVASCRIPT_RESERVED_WORDS = new Set([
+  'arguments',
+  'as',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'do',
+  'else',
+  'enum',
+  'eval',
+  'export',
+  'extends',
+  'finally',
+  'for',
+  'from',
+  'function',
+  'if',
+  'implements',
+  'import',
+  'interface',
+  'let',
+  'of',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'static',
+  'super',
+  'switch',
+  'throw',
+  'try',
+  'var',
+  'while',
+  'with',
+  'yield'
+]);
+
 export const SYNTAX_CONTRACT = Object.freeze({
   static: STATIC_RULES,
   dynamic: DYNAMIC_RULES
@@ -440,6 +483,10 @@ function shouldPreserveIdentifier(expression, identifier, startIndex, endIndex) 
   const next = nextSignificantCharacter(expression, endIndex);
 
   if (previous === '.' || previous === '$') {
+    return true;
+  }
+
+  if (JAVASCRIPT_RESERVED_WORDS.has(identifier)) {
     return true;
   }
 

@@ -266,6 +266,7 @@ The embedded host sends a baseline set of safe response headers on every reply. 
 | Key | Role |
 | --- | --- |
 | `contentSecurityPolicy` | Optional `Content-Security-Policy` value. The stock entry HTML uses inline scripts and an import map; a strict policy usually needs nonces or refactors—validate in a staging build. |
+| `contentSecurityPolicyReportOnly` | Optional `Content-Security-Policy-Report-Only` value. Use for a phased rollout before enforcing `contentSecurityPolicy`. |
 | `strictTransportSecurity` | Optional `Strict-Transport-Security` value. Applied only when the connection is HTTPS (`req.socket.encrypted`). |
 | `permissionsPolicy` | Optional override for `Permissions-Policy` (defaults still restrict camera, microphone, and geolocation when unset). |
 | `htmlDocumentCacheControl` | Optional override for `Cache-Control` on **HTML shell** responses (SPA `index.html`). When unset, the host defaults shells to **`no-store`**. |
@@ -364,6 +365,8 @@ Cookie note:
 
 - plain HTTP local development keeps the CSRF cookie local-safe with `SameSite=Lax`
 - HTTPS hosts upgrade the CSRF cookie to a secure host-prefixed cookie when the transport supports it
+
+**RPC hardening:** `POST /__brackets/rpc` requires the CSRF header and, for browser-like requests, **same-origin** checks: when `Origin` is present it must match this host; when absent, `Referer` (if present) must be same-origin; `Sec-Fetch-Site: cross-site` is rejected. Server-side and test clients that omit `Origin`/`Referer`/`Sec-Fetch-*` still work (token required).
 
 ### Website/runtime contracts
 
@@ -848,6 +851,7 @@ Harmony rule:
 
 - authored `@event` syntax should always land on Datastar's `data-on:*` event system, including simple named actions such as `@click="refresh"`
 - the current native Datastar coverage should include `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, `:set.*`, and plain transport/event expressions
+- complex inline `@event` expressions are rewritten so state identifiers become Datastar signal paths (for example `count` → `$count`); **JavaScript reserved words and control-flow keywords** (`if`, `else`, `try`, …) are preserved so full expressions stay valid JS — prefer **named route logic actions** (`@click="saveNote"`) for long RPC flows to keep markup readable
 - simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
 - simple `read("/events")` expressions in transformed markup should compile toward the Brackets live runtime helper
 

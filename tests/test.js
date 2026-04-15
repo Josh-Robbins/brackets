@@ -177,6 +177,22 @@ Deno.test('framework syntax compiler maps the documented Brackets language to Da
   assert(output.includes('data-b-html="$htmlBlock"'), ':html should stay on the framework runtime path');
 });
 
+Deno.test('framework syntax preserves JavaScript keywords in complex @click transport expressions (livedata RPC)', () => {
+  const snippet = [
+    '<button type="button" @click="window.BracketsRuntime.callRpc(\'data\', \'demo\', \'append\', [{ text: line }]).then((result) => { if (result && result.ok === true && result.row && result.row.id) { mutate(\'line\', \'\'); mutate(\'noteSaveFeedback\', \'saved\'); } else { mutate(\'noteSaveFeedback\', \'failed\'); } }).catch(() => { mutate(\'noteSaveFeedback\', \'offline\'); })">',
+    'Save',
+    '</button>'
+  ].join('');
+  const output = transformHtmlSyntax(snippet);
+  assert(!output.includes('$if'), 'statement keyword if must not be rewritten to $if');
+  assert(output.includes('if (result &&'), 'control flow should remain valid JavaScript');
+  assert(output.includes('.catch(() => {'), 'promise catch callback should compile');
+  const snippetElse = '<button @click="Promise.resolve(1).then((x) => { if (x) mutate(\'a\', 1); else mutate(\'a\', 0); })">t</button>';
+  const outElse = transformHtmlSyntax(snippetElse);
+  assert(!outElse.includes('$else'), 'else must not become $else');
+  assert(outElse.includes('else mutate'), 'else branch should remain');
+});
+
 Deno.test('framework action helpers follow the documented control, form, and file behavior', async () => {
   const runtimeSource = await Deno.readTextFile(join(repoRoot, 'framework', 'runtime.js'));
   const start = runtimeSource.indexOf('function resolveActionElement');

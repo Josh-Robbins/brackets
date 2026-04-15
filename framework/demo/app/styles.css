@@ -24,10 +24,56 @@
  *  11. Framework tour (directives demo)
  *  12. Reduced motion preference
  *
- * Fonts: Google Fonts (Inter, League Spartan) via @import — kept out of index.html shell.
+ * Fonts: Inter + League Spartan vendored as WOFF2 under /app/static/fonts (offline-friendly).
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@600;700&display=swap");
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/app/static/fonts/inter-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/app/static/fonts/inter-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/app/static/fonts/inter-600.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/app/static/fonts/inter-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "League Spartan";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/app/static/fonts/league-spartan-600.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "League Spartan";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/app/static/fonts/league-spartan-700.woff2") format("woff2");
+}
 
 /* --- 1. Design tokens --- */
 

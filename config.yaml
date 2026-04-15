@@ -83,13 +83,21 @@ security:
   # trusted  = only for intentionally trusted HTML
   html: sanitize
 
-  # Optional extra HTTP response headers (merged with host defaults). Strict CSP often needs
-  # nonces or moving inline bootstrapping; test behind HTTPS before enabling HSTS.
+  # Optional extra HTTP response headers (merged with host defaults).
+  #
+  # Production / TLS:
+  # - Terminate TLS at your reverse proxy or load balancer; set strictTransportSecurity only
+  #   when the app is served over HTTPS (the host applies it only if the socket is encrypted).
+  # - Roll out CSP in phases: use contentSecurityPolicyReportOnly first, fix violations, then
+  #   add contentSecurityPolicy. Strict CSP usually requires nonces/hashes for inline bootstrap.
+  # - Secure CSRF cookies: __Host-brackets_csrf is used automatically on HTTPS.
+  #
+  # Example (uncomment and tune):
   # headers:
+  #   contentSecurityPolicyReportOnly: "default-src 'self'; base-uri 'self'; frame-ancestors 'none'"
   #   contentSecurityPolicy: "default-src 'self'"
   #   strictTransportSecurity: "max-age=63072000; includeSubDomains"
   #   permissionsPolicy: "camera=(), microphone=(), geolocation=()"
-  #   # Stricter shell / asset caching (production-style); see docs/reference.md — Production-oriented HTTP defaults
   #   htmlDocumentCacheControl: "no-store"
   #   staticAssetCacheControl: "public, max-age=31536000, immutable"
 
