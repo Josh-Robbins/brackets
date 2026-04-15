@@ -822,11 +822,11 @@ The next concrete work in this repo should be:
 
 Before tagging a release:
 
-- Run `deno test tests/test.js --allow-all` locally (same as CI). That suite includes the **demo `data`/`demo` append + `events` readback** RPC checks and **`/robots.txt`** validation when using the repo’s default layout.
+- Run `deno test tests/test.js --allow-all` locally (same as CI). Confirm **0 failed** in the summary (ignore stale pass counts from older write-ups). The suite includes the **demo `data`/`demo` append + `events` readback** RPC checks and **`/robots.txt`** validation when using the repo’s default layout.
 - Load the configured entry (for example `framework/demo`) at `/` and confirm a single routed mount tree (no duplicated layout shells or duplicate element `id`s).
 - Confirm route metadata: after navigation, `document.title` and `meta[name="description"]` match the active route where provided in the `.view` manifest.
 - **Manual QA (demo live data):** on the demo home page, open the “Live data” hero panel, exercise save/update flows for the sample note field, and confirm storage-backed behavior with no console errors. Do not rely on ad-hoc `callRpc` from the DevTools console without a loaded CSRF token (see `docs/reference.md`). Automated tests cover the RPC append/read path and storage primitives; manual QA confirms the full in-browser UX.
-- Optional later: run Lighthouse (or another a11y/SEO auditor) in CI against the demo with fixed budgets—adds Chromium download time and flake risk, so it is not part of the default workflow yet.
+- Optional: run Lighthouse (or another a11y/SEO auditor) locally on the demo URL for SEO and accessibility; automated tests already assert **`/robots.txt`** status, `text/plain`, and body shape. Optional later: run Lighthouse in CI with fixed budgets—adds Chromium download time and flake risk, so it is not part of the default workflow yet.
 
 ## Done Means
 
