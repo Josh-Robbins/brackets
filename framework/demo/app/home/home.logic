@@ -1,0 +1,39 @@
+// framework/demo/app/home/home.logic
+// Interacts with: app/home/home.view (resolved next to .view), app/components/livedata.html (@click actions).
+
+({
+  async saveLiveNote(ctx) {
+    const line = String(ctx.state.get('line') ?? '').trim();
+    try {
+      const result = await window.BracketsRuntime.callRpc('data', 'demo', 'append', [{ text: line || 'demo row' }]);
+      if (result && result.ok === true && result.row && result.row.id) {
+        ctx.state.set({ line: '', noteSaveFeedback: 'saved' });
+        window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 2800);
+      } else {
+        ctx.state.set('noteSaveFeedback', 'failed');
+        window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 3200);
+      }
+    } catch {
+      ctx.state.set('noteSaveFeedback', 'offline');
+      window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 4200);
+    }
+  },
+
+  async saveLiveEdit(ctx) {
+    const editingId = ctx.state.get('editingId');
+    const editDraft = String(ctx.state.get('editDraft') ?? '').trim();
+    try {
+      const result = await window.BracketsRuntime.callRpc('data', 'demo', 'update', [{ id: editingId, text: editDraft }]);
+      if (result && result.ok === true && result.row && result.row.id) {
+        ctx.state.set({ editingId: null, editDraft: '', noteSaveFeedback: 'saved' });
+        window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 2800);
+      } else {
+        ctx.state.set('noteSaveFeedback', 'failed');
+        window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 3200);
+      }
+    } catch {
+      ctx.state.set('noteSaveFeedback', 'offline');
+      window.setTimeout(() => ctx.state.set('noteSaveFeedback', 'idle'), 4200);
+    }
+  }
+});
