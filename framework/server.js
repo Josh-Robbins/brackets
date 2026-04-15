@@ -58,7 +58,7 @@ const ROUTE_MARKUP_CACHE = new Map();
 const TEMPLATE_MARKUP_CACHE = new Map();
 const MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_RESPONSE_HEADERS = Object.freeze({
-  'Cache-Control': 'no-cache',
+  'Cache-Control': 'no-store',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
@@ -2155,7 +2155,7 @@ function buildHtmlShellCacheHeaders(_req, config) {
   if (typeof v === 'string' && v.trim()) {
     return { 'Cache-Control': v.trim() };
   }
-  return {};
+  return { 'Cache-Control': 'no-store' };
 }
 
 const STATIC_LONG_CACHE_EXTENSIONS = new Set([

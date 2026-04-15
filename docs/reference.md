@@ -268,12 +268,16 @@ The embedded host sends a baseline set of safe response headers on every reply. 
 | `contentSecurityPolicy` | Optional `Content-Security-Policy` value. The stock entry HTML uses inline scripts and an import map; a strict policy usually needs nonces or refactors—validate in a staging build. |
 | `strictTransportSecurity` | Optional `Strict-Transport-Security` value. Applied only when the connection is HTTPS (`req.socket.encrypted`). |
 | `permissionsPolicy` | Optional override for `Permissions-Policy` (defaults still restrict camera, microphone, and geolocation when unset). |
-| `htmlDocumentCacheControl` | Optional override for `Cache-Control` on **HTML shell** responses (SPA `index.html`). Leave unset for the default `no-cache` baseline; use `no-store` (or stricter) when the shell is sensitive. |
+| `htmlDocumentCacheControl` | Optional override for `Cache-Control` on **HTML shell** responses (SPA `index.html`). When unset, the host defaults shells to **`no-store`**. |
 | `staticAssetCacheControl` | Optional long-lived `Cache-Control` for **fingerprint-safe static assets** only (for example `.css`, `.js`, images, fonts). HTML, JSON, and API responses are not affected. |
 
 JSON responses from `__brackets` endpoints use `Cache-Control: no-store` so route payloads and RPC results are not cached by shared caches.
 
-**Local vs production:** loopback development keeps the defaults above. For HTTPS deployments, set `strictTransportSecurity` only after verifying TLS end-to-end. Pair `strictTransportSecurity` with `secure` cookies and SameSite policy on your edge or host. Tighten `htmlDocumentCacheControl` / `staticAssetCacheControl` when you have hashed asset filenames or a CDN.
+**Content-Security-Policy (production):** there is no safe one-size default while the stock entry uses inline scripts and an import map. For production, set `security.headers.contentSecurityPolicy` after testing—often with **nonces** or **hashes** for boot scripts, or by moving inline code to external files. Example starting point (will break until adapted): `default-src 'self'; base-uri 'self'; frame-ancestors 'none'`.
+
+**Local vs production:** loopback development keeps the defaults above. For HTTPS deployments, set `strictTransportSecurity` only after verifying TLS end-to-end. The embedded host already sends **`Secure`** and **`__Host-`** CSRF cookies when `req.socket.encrypted` is true. Tighten `htmlDocumentCacheControl` / `staticAssetCacheControl` when you have hashed asset filenames or a CDN.
+
+**Troubleshooting `POST /__brackets/rpc`:** the host requires a matching **`x-brackets-csrf`** header (see `<meta name="csrf">` after the page loads). Calling `BracketsRuntime.callRpc(...)` from the **browser console** before the shell has a token, or with a stale tab, can fail with **403** or **`fetch` errors**—that is not the same as the in-page **Save** button after a normal load.
 
 ### `.api` helper surface
 

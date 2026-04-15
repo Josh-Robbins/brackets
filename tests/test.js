@@ -1250,3 +1250,101 @@ Deno.test('package demo entry: render contract and shell inject route metadata',
     assertEqual(homeRoute.layoutPath, null, 'contract should not report a layout path for flat demo home');
   });
 });
+
+Deno.test('package demo: data demo append persists and events readback; host stays up with robots', async () => {
+  await withServer(repoRoot, async ({ url }) => {
+    const sessionSecurity = await getSessionSecurity(url);
+    assertEqual(sessionSecurity.status, 200, 'session should be available for demo RPC');
+    const csrfHeaders = sessionSecurity.headers;
+    const routePayload = {
+      path: '/',
+      query: {},
+      hash: ''
+    };
+
+    const noteText = `demo-test-${Date.now()}`;
+    const appendResponse = await fetch(`${url}/__brackets/rpc`, {
+      method: 'POST',
+      headers: {
+        ...csrfHeaders,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'data',
+        module: 'demo',
+        method: 'append',
+        args: [{ text: noteText }],
+        route: routePayload
+      })
+    });
+    const appendJson = await appendResponse.json();
+    assertEqual(appendResponse.status, 200, 'demo append RPC should return 200');
+    assertEqual(appendJson.ok, true, 'demo append payload should be ok');
+    assert(appendJson.result?.row?.id, 'append should return a row id');
+
+    const eventsResponse = await fetch(`${url}/__brackets/rpc`, {
+      method: 'POST',
+      headers: {
+        ...csrfHeaders,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'data',
+        module: 'demo',
+        method: 'events',
+        args: [],
+        route: routePayload
+      })
+    });
+    const eventsJson = await eventsResponse.json();
+    assertEqual(eventsResponse.status, 200, 'demo events RPC should return 200');
+    assertEqual(eventsJson.ok, true, 'demo events payload should be ok');
+    const events = eventsJson.result?.events;
+    assert(Array.isArray(events), 'events should return an array');
+    assert(
+      events.some((row) => String(row?.text ?? '') === noteText),
+      'events list should include the appended note text'
+    );
+
+    for (let i = 0; i < 15; i += 1) {
+      const r = await fetch(`${url}/__brackets/rpc`, {
+        method: 'POST',
+        headers: {
+          ...csrfHeaders,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify({
+          kind: 'data',
+          module: 'demo',
+          method: 'append',
+          args: [{ text: `stress-${i}-${Date.now()}` }],
+          route: routePayload
+        })
+      });
+      const rj = await r.json();
+      assertEqual(r.status, 200, `stress append ${i} should return 200`);
+      assertEqual(rj.ok, true, `stress append ${i} payload should be ok`);
+      const robots = await fetch(`${url}/robots.txt`);
+      assertEqual(robots.status, 200, `robots.txt should stay reachable during stress ${i}`);
+      await robots.arrayBuffer();
+    }
+  });
+});
+
+Deno.test('GET /robots.txt is valid plain text without BOM', async () => {
+  await withServer(repoRoot, async ({ url }) => {
+    const res = await fetch(`${url}/robots.txt`);
+    assertEqual(res.status, 200, 'robots.txt should be served');
+    assertEqual(res.headers.get('content-type')?.includes('text/plain'), true, 'robots should be text/plain');
+    const buf = new Uint8Array(await res.arrayBuffer());
+    assert(buf.length >= 2, 'robots body should not be empty');
+    const hasUtf8Bom = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+    assert(!hasUtf8Bom, 'robots should not start with a UTF-8 BOM');
+    const text = new TextDecoder('utf-8').decode(buf);
+    assert(text.includes('User-agent:'), 'robots should include User-agent');
+    assert(text.includes('Allow:'), 'robots should include Allow');
+  });
+});

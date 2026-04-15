@@ -1,5 +1,2 @@
-# Default Brackets package root. The host also serves robots.txt from entry.folder when present.
-# Sitemap and feed are available at /sitemap.xml and /feed.xml when the embedded host runs.
-
 User-agent: *
 Allow: /

@@ -1,4 +1,2 @@
-# Shipped framework demo (entry.folder: framework/demo). Overrides package robots.txt when served from this entry.
-
 User-agent: *
 Allow: /
