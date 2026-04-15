@@ -1,3 +1,10 @@
+/**
+ * Brackets HTML/view → Datastar directive compiler (framework/syntax.js).
+ * Interacts with: framework/runtime.js (consumed markup), tests/test.js.
+ * Inline `@event` bodies use a lightweight identifier rewrite toward Datastar signals;
+ * reserved JS words are preserved. Until a scope-aware parser ships, keep complex control
+ * flow and multi-step work in named `.logic` actions — see docs/reference.md (Harmony rule).
+ */
 const STATIC_RULES = [
   {
     kind: 'directive',

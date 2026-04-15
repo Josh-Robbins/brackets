@@ -73,7 +73,13 @@ Recommended release channels:
 
 The important thing is that the default Brackets experience stays download-first and file-first.
 
+## CI and packaged `release/`
+
+When this repository contains a `release/` tree, GitHub Actions lists files, prints **SHA256** checksums, and, if **`release/SHA256SUMS`** is committed, verifies it with `sha256sum -c` so packaged artifacts cannot drift silently. Without that manifest, the job is informational only; source remains authoritative and **`deno test`** plus browser smoke are the primary gates.
+
 ## Supported Runtime Modes
+
+**Production-supported today (CI-gated, same contract):** the **built-in same-origin Brackets host** plus ordinary **web deployment** of the same folder behind HTTPS. The three shapes below describe how apps are *organized*; native shells (Tauri, WebView2, and similar) are integration targets, not a shipped parity matrix—plan adapter work separately.
 
 Brackets should officially support three distribution modes with the same app contract:
 

@@ -267,6 +267,7 @@ The embedded host sends a baseline set of safe response headers on every reply. 
 | --- | --- |
 | `contentSecurityPolicy` | Optional `Content-Security-Policy` value. The stock entry HTML uses inline scripts and an import map; a strict policy usually needs nonces or refactors—validate in a staging build. |
 | `contentSecurityPolicyReportOnly` | Optional `Content-Security-Policy-Report-Only` value. Use for a phased rollout before enforcing `contentSecurityPolicy`. |
+| `cspNonceInlineScripts` | When `true` and **`contentSecurityPolicy` is not set**, the host adds a per-response nonce to inline `<script>` tags in the stock shell (including `type="importmap"`) and emits a matching **`Content-Security-Policy`** (`script-src 'nonce-…' 'strict-dynamic'`, `connect-src 'self'`, …). Use for staged hardening; validate with your Datastar/runtime URLs. |
 | `strictTransportSecurity` | Optional `Strict-Transport-Security` value. Applied only when the connection is HTTPS (`req.socket.encrypted`). |
 | `permissionsPolicy` | Optional override for `Permissions-Policy` (defaults still restrict camera, microphone, and geolocation when unset). |
 | `htmlDocumentCacheControl` | Optional override for `Cache-Control` on **HTML shell** responses (SPA `index.html`). When unset, the host defaults shells to **`no-store`**. |
@@ -274,7 +275,7 @@ The embedded host sends a baseline set of safe response headers on every reply. 
 
 JSON responses from `__brackets` endpoints use `Cache-Control: no-store` so route payloads and RPC results are not cached by shared caches.
 
-**Content-Security-Policy (production):** there is no safe one-size default while the stock entry uses inline scripts and an import map. For production, set `security.headers.contentSecurityPolicy` after testing—often with **nonces** or **hashes** for boot scripts, or by moving inline code to external files. Example starting point (will break until adapted): `default-src 'self'; base-uri 'self'; frame-ancestors 'none'`.
+**Content-Security-Policy (production):** there is no safe one-size default while the stock entry uses inline scripts and an import map. For production, set `security.headers.contentSecurityPolicy` after testing—often with **nonces** or **hashes** for boot scripts, or by moving inline code to external files. When you are not ready to author a full policy string yet, **`cspNonceInlineScripts: true`** wires the stock shell’s inline scripts to a generated nonce and applies a conservative built-in policy (see table above). Example starting point for a hand-authored policy (will break until adapted): `default-src 'self'; base-uri 'self'; frame-ancestors 'none'`.
 
 **Local vs production:** loopback development keeps the defaults above. For HTTPS deployments, set `strictTransportSecurity` only after verifying TLS end-to-end. The embedded host already sends **`Secure`** and **`__Host-`** CSRF cookies when `req.socket.encrypted` is true. Tighten `htmlDocumentCacheControl` / `staticAssetCacheControl` when you have hashed asset filenames or a CDN.
 
@@ -366,7 +367,7 @@ Cookie note:
 - plain HTTP local development keeps the CSRF cookie local-safe with `SameSite=Lax`
 - HTTPS hosts upgrade the CSRF cookie to a secure host-prefixed cookie when the transport supports it
 
-**RPC hardening:** `POST /__brackets/rpc` requires the CSRF header and, for browser-like requests, **same-origin** checks: when `Origin` is present it must match this host; when absent, `Referer` (if present) must be same-origin; `Sec-Fetch-Site: cross-site` is rejected. Server-side and test clients that omit `Origin`/`Referer`/`Sec-Fetch-*` still work (token required).
+**RPC / live hardening:** `POST /__brackets/rpc` and **`GET /__brackets/live*`** resolve the target route from the client-supplied path, then require **`routeAuthStatus === 'allowed'`** for that route and that the requested **`.data` / `.api` module id** appears on the route manifest’s **`data` / `api`** lists (canonical ids under `app/data` and `app/api`, same normalization as discovery). On any denial (missing route, unauthorized route, or undeclared module), the host returns **403** with code **`BRACKETS_REQUEST_DENIED`** and a generic message so callers cannot distinguish “module missing” from “not allowed”. Separately, `POST /__brackets/rpc` still requires the CSRF header and, for browser-like requests, **same-origin** checks: when `Origin` is present it must match this host; when absent, `Referer` (if present) must be same-origin; `Sec-Fetch-Site: cross-site` is rejected. Server-side and test clients that omit `Origin`/`Referer`/`Sec-Fetch-*` still work (token required).
 
 ### Website/runtime contracts
 
@@ -377,7 +378,7 @@ Cookie note:
 | `/robots.txt` | robots output with sitemap reference |
 | `/__brackets/host` | host capability contract |
 | `/.well-known/brackets-host.json` | public host capability contract |
-| `/.well-known/brackets-app.json` | public app contract |
+| `/.well-known/brackets-app.json` | public app contract (`contractVersion: 2`); **`modules.data` / `modules.api`** list only modules referenced on at least one route — the runtime builds per-route `ctx.data` / `ctx.api` from the render payload using the same allowlists |
 | `run app test` | bundled Deno package contract test |
 
 ### Final recommendations
@@ -852,6 +853,7 @@ Harmony rule:
 - authored `@event` syntax should always land on Datastar's `data-on:*` event system, including simple named actions such as `@click="refresh"`
 - the current native Datastar coverage should include `:state`, `:calc`, `:run`, `:watch`, `:text`, `:show`, `:bind`, `:class.*`, `:set.*`, and plain transport/event expressions
 - complex inline `@event` expressions are rewritten so state identifiers become Datastar signal paths (for example `count` → `$count`); **JavaScript reserved words and control-flow keywords** (`if`, `else`, `try`, …) are preserved so full expressions stay valid JS — prefer **named route logic actions** (`@click="saveNote"`) for long RPC flows to keep markup readable
+- **until a scope-aware JS parser is integrated:** treat inline `@event` bodies as **short glue** (simple calls, guards, `mutate`, `read`); put branching, loops, destructuring-heavy logic, and multi-step RPC in **named actions in `.logic`** so identifier rewrite stays predictable (full scope-aware rewriting would require a real parser pipeline)
 - simple `mutate("path", value)` expressions should compile toward native Datastar signal assignment when possible
 - simple `read("/events")` expressions in transformed markup should compile toward the Brackets live runtime helper
 

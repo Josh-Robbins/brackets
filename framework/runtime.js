@@ -2833,6 +2833,13 @@ function createModuleNamespace(kind, modules = []) {
   return namespace;
 }
 
+function modulesForActiveRoute(contract, route, kind) {
+  const all = kind === 'data' ? (contract.modules?.data ?? []) : (contract.modules?.api ?? []);
+  const field = kind === 'data' ? 'data' : 'api';
+  const allowed = new Set(route?.[field] ?? []);
+  return all.filter((module) => allowed.has(module.id));
+}
+
 let navigate = async () => {};
 
 function buildNavApi(contract) {
@@ -3211,8 +3218,8 @@ async function renderRoute(pathname, options = {}) {
   observeFrameworkDom();
   await applyFrameworkDirectives(root);
 
-  dataNamespace = createModuleNamespace('data', contract.modules?.data ?? []);
-  apiNamespace = createModuleNamespace('api', contract.modules?.api ?? []);
+  dataNamespace = createModuleNamespace('data', modulesForActiveRoute(contract, payload.route, 'data'));
+  apiNamespace = createModuleNamespace('api', modulesForActiveRoute(contract, payload.route, 'api'));
   activeLogic = await loadLogicModule(payload.route?.logicUrl);
   await callLogic('mount');
 

@@ -41,3 +41,6 @@ jobs:
         run: find release -type f 2>/dev/null | head -200
       - name: SHA256 checksums
         run: (cd release && find . -type f -print0 | sort -z | xargs -0 sha256sum) > /tmp/release-sha256.txt && cat /tmp/release-sha256.txt
+      - name: Verify release/SHA256SUMS when committed
+        run: |
+          if [ -f release/SHA256SUMS ]; then (cd release && sha256sum -c SHA256SUMS); else echo "No release/SHA256SUMS manifest; skip verify (add one to gate drift)."; fi

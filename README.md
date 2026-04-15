@@ -14,6 +14,11 @@ Current public status:
 - ready for broader real-world testing
 - not yet being called `v1` until more people have tried it in production
 
+## Production support matrix
+
+- **Supported for production-style use today:** web apps served from the **built-in same-origin Brackets host** (the `run app` / embedded host path), with route manifests declaring `data` / `api` dependencies, TLS terminated in front of the host when exposing beyond loopback, and CSP configured deliberately (`config.yaml` documents phased CSP and optional `cspNonceInlineScripts` for the stock shell).
+- **Adapter / integration targets (not production-parity guarantees):** Tauri, WebView2, and other native shells are plausible via the same HTTP contracts, but Brackets does not ship or CI-gate a full native-shell matrix—treat those as separate integration work.
+
 ## Start Here
 
 - [Docs front page](./docs/index.md)

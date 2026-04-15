@@ -779,6 +779,15 @@ Deno.test('framework encrypted storage works for real through .data modules', as
     }, null, 2));
 
     await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>secure</body></html>');
+    await writeText(join(tempRoot, 'app', 'views', 'secure.view'), [
+      'page({',
+      "  id: 'secure',",
+      "  route: '/',",
+      "  html: '@app/pages/secure.html',",
+      "  data: { profile: '@data/profile.data' }",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'pages', 'secure.html'), '<main></main>');
     await writeText(join(tempRoot, 'app', 'data', 'profile.data'), [
       '({',
       '  async save({ storage }, nextValue) {',
@@ -858,6 +867,15 @@ Deno.test('framework .db storage works for real through .data modules', async ()
     }, null, 2));
 
     await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>db</body></html>');
+    await writeText(join(tempRoot, 'app', 'views', 'prefs.view'), [
+      'page({',
+      "  id: 'prefs',",
+      "  route: '/',",
+      "  html: '@app/pages/prefs.html',",
+      "  data: { prefs: '@data/prefs.data' }",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'pages', 'prefs.html'), '<main></main>');
     await writeText(join(tempRoot, 'app', 'data', 'prefs.data'), [
       '({',
       '  async save({ db }, nextValue) {',
@@ -928,6 +946,15 @@ Deno.test('framework live SSE can stream .data changes from flat-file storage', 
     }, null, 2));
 
     await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>live</body></html>');
+    await writeText(join(tempRoot, 'app', 'views', 'live.view'), [
+      'page({',
+      "  id: 'live',",
+      "  route: '/',",
+      "  html: '@app/pages/live.html',",
+      "  data: { contacts: '@data/contacts.data' }",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'pages', 'live.html'), '<main></main>');
     await writeText(join(tempRoot, 'app', 'data', 'contacts.data'), [
       '({',
       '  async list({ json }) {',
@@ -1243,6 +1270,79 @@ Deno.test('dev reload SSE emits spa and fullReload when package files change', a
   }
 });
 
+Deno.test('framework RPC denies calls when module is not declared on the matched route', async () => {
+  const tempRoot = await Deno.makeTempDir({ prefix: 'brackets-rpc-guard-' });
+
+  try {
+    await writeText(join(tempRoot, 'config.json'), JSON.stringify({
+      host: '127.0.0.1',
+      port: 0,
+      entry: {
+        folder: '.',
+        route: '/',
+        autoStart: false
+      }
+    }, null, 2));
+
+    await writeText(join(tempRoot, 'index.html'), '<!doctype html><html><body>g</body></html>');
+    await writeText(join(tempRoot, 'app', 'views', 'public.view'), [
+      'page({',
+      "  id: 'public',",
+      "  route: '/public',",
+      "  html: '@app/pages/pub.html',",
+      "  data: { a: '@data/public.data' }",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'views', 'admin.view'), [
+      'page({',
+      "  id: 'admin',",
+      "  route: '/admin',",
+      "  html: '@app/pages/adm.html',",
+      "  data: { b: '@data/adminSecret.data' }",
+      '})'
+    ].join('\n'));
+    await writeText(join(tempRoot, 'app', 'pages', 'pub.html'), '<main>pub</main>');
+    await writeText(join(tempRoot, 'app', 'pages', 'adm.html'), '<main>adm</main>');
+    await writeText(join(tempRoot, 'app', 'data', 'public.data'), '({ async ping() { return { ok: true, which: "public" }; } })');
+    await writeText(join(tempRoot, 'app', 'data', 'adminSecret.data'), '({ async ping() { return { ok: true, which: "admin" }; } })');
+
+    await withServer(tempRoot, async ({ url }) => {
+      const sessionSecurity = await getSessionSecurity(url);
+      const denied = await fetch(`${url}/__brackets/rpc`, {
+        method: 'POST',
+        headers: sessionSecurity.headers,
+        body: JSON.stringify({
+          kind: 'data',
+          module: 'adminSecret',
+          method: 'ping',
+          args: [],
+          route: { path: '/public', query: {}, hash: '' }
+        })
+      });
+      const deniedJson = await denied.json();
+      assertEqual(denied.status, 403, 'RPC should refuse modules not on the active route');
+      assertEqual(deniedJson.code, 'BRACKETS_REQUEST_DENIED', 'refusal should use a stable denial code');
+
+      const allowed = await fetch(`${url}/__brackets/rpc`, {
+        method: 'POST',
+        headers: sessionSecurity.headers,
+        body: JSON.stringify({
+          kind: 'data',
+          module: 'public',
+          method: 'ping',
+          args: [],
+          route: { path: '/public', query: {}, hash: '' }
+        })
+      });
+      const allowedJson = await allowed.json();
+      assertEqual(allowed.status, 200, 'RPC should allow modules declared on the matched route');
+      assertEqual(allowedJson.result.which, 'public', 'expected module should run');
+    });
+  } finally {
+    await Deno.remove(tempRoot, { recursive: true });
+  }
+});
+
 Deno.test('package demo entry: render contract and shell inject route metadata', async () => {
   await withServer(repoRoot, async ({ url }) => {
     const renderPayload = await fetch(`${url}/__brackets/render?path=%2F`).then((response) => response.json());
@@ -1261,9 +1361,15 @@ Deno.test('package demo entry: render contract and shell inject route metadata',
     assert(homeHtml.includes('Brackets</title>') || homeHtml.includes('<title>Brackets</title>'), 'shell title should match route');
 
     const contract = await fetch(`${url}/.well-known/brackets-app.json`).then((response) => response.json());
+    assertEqual(contract.contractVersion, 2, 'app contract should report contractVersion 2');
     const homeRoute = contract.routes.find((r) => r.route === '/');
     assert(homeRoute, 'contract should list / route');
     assertEqual(homeRoute.layoutPath, null, 'contract should not report a layout path for flat demo home');
+    const demoModuleIds = (contract.modules?.data ?? []).map((m) => m.id);
+    assert(
+      demoModuleIds.length <= 1 && (demoModuleIds.length === 0 || demoModuleIds[0] === 'demo'),
+      'contract should only expose data modules declared on routes (demo home declares demo)'
+    );
   });
 });
 

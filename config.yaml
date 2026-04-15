@@ -92,6 +92,10 @@ security:
   #   add contentSecurityPolicy. Strict CSP usually requires nonces/hashes for inline bootstrap.
   # - Secure CSRF cookies: __Host-brackets_csrf is used automatically on HTTPS.
   #
+  # Optional: add nonces to inline <script> / importmap in the stock index shell and emit a matching
+  # Content-Security-Policy (only when contentSecurityPolicy is not set). See docs/reference.md.
+  # cspNonceInlineScripts: true
+  #
   # Example (uncomment and tune):
   # headers:
   #   contentSecurityPolicyReportOnly: "default-src 'self'; base-uri 'self'; frame-ancestors 'none'"
