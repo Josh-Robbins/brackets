@@ -1,9 +1,8 @@
 /**
  * Brackets HTML/view → Datastar directive compiler (framework/syntax.js).
  * Interacts with: framework/runtime.js (consumed markup), tests/test.js.
- * Inline `@event` bodies use a lightweight identifier rewrite toward Datastar signals;
- * reserved JS words are preserved. Until a scope-aware parser ships, keep complex control
- * flow and multi-step work in named `.logic` actions — see docs/reference.md (Harmony rule).
+ * Inline `@event` bodies use a lightweight scope-aware identifier rewrite toward Datastar
+ * signals so callback params and local declarations do not get rewritten into signals.
  */
 const STATIC_RULES = [
   {
@@ -258,7 +257,6 @@ export const SYNTAX_CONTRACT = Object.freeze({
 
 function escapeAttributeValue(value) {
   return String(value ?? '')
-    .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/"/g, '&quot;');
 }
@@ -485,11 +483,552 @@ function nextNonWhitespace(source, startIndex) {
   return source.slice(index, index + 2);
 }
 
-function shouldPreserveIdentifier(expression, identifier, startIndex, endIndex) {
+function nextNonWhitespaceIndex(source, startIndex) {
+  let index = startIndex;
+  while (index < source.length && /\s/.test(source[index])) {
+    index += 1;
+  }
+  return index;
+}
+
+function isIdentifierStart(char) {
+  return /[A-Za-z_$]/.test(char);
+}
+
+function isIdentifierPart(char) {
+  return /[A-Za-z0-9_$]/.test(char);
+}
+
+function createExpressionScope(kind = 'block') {
+  return {
+    kind,
+    bindings: new Set(),
+    concise: null
+  };
+}
+
+function addBindingsToScope(scope, bindings = []) {
+  for (const binding of bindings) {
+    if (!binding || JAVASCRIPT_RESERVED_WORDS.has(binding)) {
+      continue;
+    }
+    scope.bindings.add(binding);
+  }
+}
+
+function nearestFunctionScope(scopes) {
+  for (let index = scopes.length - 1; index >= 0; index -= 1) {
+    if (scopes[index].kind === 'function') {
+      return scopes[index];
+    }
+  }
+  return scopes[0];
+}
+
+function hasLocalBinding(scopes, identifier) {
+  for (let index = scopes.length - 1; index >= 0; index -= 1) {
+    if (scopes[index].bindings.has(identifier)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function readIdentifier(source, startIndex) {
+  if (!isIdentifierStart(source[startIndex] ?? '')) {
+    return null;
+  }
+
+  let endIndex = startIndex + 1;
+  while (endIndex < source.length && isIdentifierPart(source[endIndex])) {
+    endIndex += 1;
+  }
+
+  return {
+    name: source.slice(startIndex, endIndex),
+    endIndex
+  };
+}
+
+function findMatchingDelimiter(source, startIndex, openChar, closeChar) {
+  if (source[startIndex] !== openChar) {
+    return -1;
+  }
+
+  let depth = 0;
+  let quote = null;
+  let escape = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1] ?? '';
+
+    if (lineComment) {
+      if (char === '\n') {
+        lineComment = false;
+      }
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escape) {
+        escape = false;
+      } else if (char === '\\') {
+        escape = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === '\'' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === openChar) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closeChar) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
+}
+
+function stripTopLevelInitializer(source) {
+  let quote = null;
+  let escape = false;
+  let lineComment = false;
+  let blockComment = false;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1] ?? '';
+
+    if (lineComment) {
+      if (char === '\n') {
+        lineComment = false;
+      }
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escape) {
+        escape = false;
+      } else if (char === '\\') {
+        escape = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === '\'' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '(') {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ')') {
+      parenDepth -= 1;
+      continue;
+    }
+    if (char === '[') {
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === ']') {
+      bracketDepth -= 1;
+      continue;
+    }
+    if (char === '{') {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === '}') {
+      braceDepth -= 1;
+      continue;
+    }
+
+    if (parenDepth || bracketDepth || braceDepth) {
+      continue;
+    }
+
+    if (char === '=' && next !== '=' && next !== '>' && source[index - 1] !== '!' && source[index - 1] !== '<' && source[index - 1] !== '>') {
+      return source.slice(0, index).trim();
+    }
+  }
+
+  const relationMatch = source.match(/^([\s\S]*?)\s+\b(?:of|in)\b\s+[\s\S]*$/);
+  return relationMatch ? relationMatch[1].trim() : source.trim();
+}
+
+function extractBindingsFromPattern(source) {
+  const bindings = new Set();
+  let quote = null;
+  let escape = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote) {
+      if (escape) {
+        escape = false;
+      } else if (char === '\\') {
+        escape = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === '\'' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (!isIdentifierStart(char)) {
+      continue;
+    }
+
+    const token = readIdentifier(source, index);
+    if (!token) {
+      continue;
+    }
+
+    const previous = previousSignificantCharacter(source, index);
+    const next = nextSignificantCharacter(source, token.endIndex);
+    if (
+      previous !== '.'
+      && next !== ':'
+      && !IDENTIFIER_GLOBALS.has(token.name)
+      && !JAVASCRIPT_RESERVED_WORDS.has(token.name)
+    ) {
+      bindings.add(token.name);
+    }
+
+    index = token.endIndex - 1;
+  }
+
+  return [...bindings];
+}
+
+function extractBindingsFromParameterList(source) {
+  return splitTopLevelArguments(source)
+    .flatMap((entry) => extractBindingsFromPattern(stripTopLevelInitializer(entry)));
+}
+
+function findStatementBoundary(source, startIndex) {
+  let quote = null;
+  let escape = false;
+  let lineComment = false;
+  let blockComment = false;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+
+  for (let index = startIndex; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1] ?? '';
+
+    if (lineComment) {
+      if (char === '\n') {
+        lineComment = false;
+      }
+      continue;
+    }
+
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (quote) {
+      if (escape) {
+        escape = false;
+      } else if (char === '\\') {
+        escape = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+
+    if (char === '"' || char === '\'' || char === '`') {
+      quote = char;
+      continue;
+    }
+
+    if (char === '(') {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ')') {
+      if (!parenDepth && !bracketDepth && !braceDepth) {
+        return index;
+      }
+      parenDepth -= 1;
+      continue;
+    }
+    if (char === '[') {
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === ']') {
+      bracketDepth -= 1;
+      continue;
+    }
+    if (char === '{') {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === '}') {
+      if (!parenDepth && !bracketDepth && !braceDepth) {
+        return index;
+      }
+      braceDepth -= 1;
+      continue;
+    }
+
+    if (!parenDepth && !bracketDepth && !braceDepth && char === ';') {
+      return index + 1;
+    }
+  }
+
+  return source.length;
+}
+
+function parseArrowParameterList(source, startIndex) {
+  if (source[startIndex] !== '(') {
+    return null;
+  }
+
+  const closeIndex = findMatchingDelimiter(source, startIndex, '(', ')');
+  if (closeIndex === -1) {
+    return null;
+  }
+
+  const arrowIndex = nextNonWhitespaceIndex(source, closeIndex + 1);
+  if (source.slice(arrowIndex, arrowIndex + 2) !== '=>') {
+    return null;
+  }
+
+  return {
+    raw: source.slice(startIndex, arrowIndex + 2),
+    endIndex: arrowIndex + 2,
+    bindings: extractBindingsFromParameterList(source.slice(startIndex + 1, closeIndex))
+  };
+}
+
+function parseFunctionHeader(source, startIndex, scopes) {
+  if (!/^function\b/.test(source.slice(startIndex))) {
+    return null;
+  }
+
+  let cursor = startIndex + 'function'.length;
+  cursor = nextNonWhitespaceIndex(source, cursor);
+  if (source[cursor] === '*') {
+    cursor = nextNonWhitespaceIndex(source, cursor + 1);
+  }
+
+  let functionName = '';
+  const maybeName = readIdentifier(source, cursor);
+  if (maybeName) {
+    functionName = maybeName.name;
+    cursor = nextNonWhitespaceIndex(source, maybeName.endIndex);
+  }
+
+  if (source[cursor] !== '(') {
+    return null;
+  }
+
+  const closeIndex = findMatchingDelimiter(source, cursor, '(', ')');
+  if (closeIndex === -1) {
+    return null;
+  }
+
+  const previous = previousSignificantCharacter(source, startIndex);
+  if (functionName && !['=', '(', ',', ':'].includes(previous)) {
+    addBindingsToScope(nearestFunctionScope(scopes), [functionName]);
+  }
+
+  const scope = createExpressionScope('function');
+  addBindingsToScope(scope, [functionName, ...extractBindingsFromParameterList(source.slice(cursor + 1, closeIndex))]);
+
+  return {
+    raw: source.slice(startIndex, closeIndex + 1),
+    endIndex: closeIndex + 1,
+    scope
+  };
+}
+
+function parseCatchHeader(source, startIndex) {
+  if (!/^catch\b/.test(source.slice(startIndex))) {
+    return null;
+  }
+
+  if (previousSignificantCharacter(source, startIndex) !== '}') {
+    return null;
+  }
+
+  let cursor = nextNonWhitespaceIndex(source, startIndex + 'catch'.length);
+  if (source[cursor] !== '(') {
+    return null;
+  }
+
+  const closeIndex = findMatchingDelimiter(source, cursor, '(', ')');
+  if (closeIndex === -1) {
+    return null;
+  }
+
+  const scope = createExpressionScope('block');
+  addBindingsToScope(scope, extractBindingsFromPattern(source.slice(cursor + 1, closeIndex)));
+
+  return {
+    raw: source.slice(startIndex, closeIndex + 1),
+    endIndex: closeIndex + 1,
+    scope
+  };
+}
+
+function parseVariableDeclaration(source, startIndex, keyword, scopes) {
+  const endIndex = findStatementBoundary(source, startIndex + keyword.length);
+  const raw = source.slice(startIndex, endIndex);
+  const body = raw
+    .replace(new RegExp(`^${keyword}\\b`), '')
+    .replace(/;$/, '')
+    .trim();
+
+  const bindings = splitTopLevelArguments(body)
+    .flatMap((entry) => extractBindingsFromPattern(stripTopLevelInitializer(entry)));
+
+  const targetScope = keyword === 'var'
+    ? nearestFunctionScope(scopes)
+    : scopes[scopes.length - 1];
+  addBindingsToScope(targetScope, bindings);
+
+  return {
+    raw,
+    endIndex
+  };
+}
+
+function establishArrowScope(bindings, expression, bodyStartIndex, scopes, pendingScopes, state) {
+  const scope = createExpressionScope('function');
+  addBindingsToScope(scope, bindings);
+
+  const nextIndex = nextNonWhitespaceIndex(expression, bodyStartIndex);
+  if (expression[nextIndex] === '{') {
+    pendingScopes.push(scope);
+    return;
+  }
+
+  scope.concise = {
+    parenDepth: state.parenDepth,
+    bracketDepth: state.bracketDepth,
+    braceDepth: state.braceDepth
+  };
+  scopes.push(scope);
+}
+
+function closeCompletedConciseScopes(scopes, char, state) {
+  while (scopes.length > 1) {
+    const scope = scopes[scopes.length - 1];
+    const concise = scope.concise;
+    if (!concise) {
+      return;
+    }
+
+    const sameDepth = concise.parenDepth === state.parenDepth
+      && concise.bracketDepth === state.bracketDepth
+      && concise.braceDepth === state.braceDepth;
+    if (!sameDepth || !',;)]}'.includes(char)) {
+      return;
+    }
+
+    scopes.pop();
+  }
+}
+
+function shouldPreserveIdentifier(expression, identifier, startIndex, endIndex, scopes) {
   const previous = previousSignificantCharacter(expression, startIndex);
   const next = nextSignificantCharacter(expression, endIndex);
 
   if (previous === '.' || previous === '$') {
+    return true;
+  }
+
+  if (hasLocalBinding(scopes, identifier)) {
     return true;
   }
 
@@ -530,9 +1069,54 @@ export function transformDatastarExpression(expression, options = {}) {
   let index = 0;
   let quote = null;
   let escape = false;
+  let lineComment = false;
+  let blockComment = false;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  const scopes = [createExpressionScope('function')];
+  const pendingScopes = [];
 
   while (index < expression.length) {
     const char = expression[index];
+    const next = expression[index + 1] ?? '';
+
+    closeCompletedConciseScopes(scopes, char, { parenDepth, bracketDepth, braceDepth });
+
+    if (lineComment) {
+      output += char;
+      if (char === '\n') {
+        lineComment = false;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (blockComment) {
+      output += char;
+      if (char === '*' && next === '/') {
+        output += next;
+        blockComment = false;
+        index += 2;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+
+    if (!quote && char === '/' && next === '/') {
+      output += '//';
+      lineComment = true;
+      index += 2;
+      continue;
+    }
+
+    if (!quote && char === '/' && next === '*') {
+      output += '/*';
+      blockComment = true;
+      index += 2;
+      continue;
+    }
 
     if (quote) {
       output += char;
@@ -547,6 +1131,64 @@ export function transformDatastarExpression(expression, options = {}) {
       continue;
     }
 
+    if (char === '(') {
+      const arrowParams = parseArrowParameterList(expression, index);
+      if (arrowParams) {
+        output += arrowParams.raw;
+        establishArrowScope(arrowParams.bindings, expression, arrowParams.endIndex, scopes, pendingScopes, {
+          parenDepth,
+          bracketDepth,
+          braceDepth
+        });
+        index = arrowParams.endIndex;
+        continue;
+      }
+
+      parenDepth += 1;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === ')') {
+      parenDepth -= 1;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === '[') {
+      bracketDepth += 1;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === ']') {
+      bracketDepth -= 1;
+      output += char;
+      index += 1;
+      continue;
+    }
+
+    if (char === '{') {
+      braceDepth += 1;
+      output += char;
+      scopes.push(pendingScopes.pop() ?? createExpressionScope('block'));
+      index += 1;
+      continue;
+    }
+
+    if (char === '}') {
+      braceDepth -= 1;
+      output += char;
+      if (scopes.length > 1) {
+        scopes.pop();
+      }
+      index += 1;
+      continue;
+    }
+
     if (char === '"' || char === '\'' || char === '`') {
       quote = char;
       output += char;
@@ -554,14 +1196,52 @@ export function transformDatastarExpression(expression, options = {}) {
       continue;
     }
 
-    if (/[A-Za-z_$]/.test(char)) {
-      let endIndex = index + 1;
-      while (endIndex < expression.length && /[A-Za-z0-9_$]/.test(expression[endIndex])) {
-        endIndex += 1;
+    if (isIdentifierStart(char)) {
+      const token = readIdentifier(expression, index);
+      const identifier = token?.name ?? '';
+      const endIndex = token?.endIndex ?? index + 1;
+
+      if (identifier === 'function') {
+        const header = parseFunctionHeader(expression, index, scopes);
+        if (header) {
+          output += header.raw;
+          pendingScopes.push(header.scope);
+          index = header.endIndex;
+          continue;
+        }
       }
 
-      const identifier = expression.slice(index, endIndex);
-      if (shouldPreserveIdentifier(expression, identifier, index, endIndex)) {
+      if (identifier === 'catch') {
+        const catchHeader = parseCatchHeader(expression, index);
+        if (catchHeader) {
+          output += catchHeader.raw;
+          pendingScopes.push(catchHeader.scope);
+          index = catchHeader.endIndex;
+          continue;
+        }
+      }
+
+      if (identifier === 'const' || identifier === 'let' || identifier === 'var') {
+        const declaration = parseVariableDeclaration(expression, index, identifier, scopes);
+        output += declaration.raw;
+        index = declaration.endIndex;
+        continue;
+      }
+
+      const arrowIndex = nextNonWhitespaceIndex(expression, endIndex);
+      if (expression.slice(arrowIndex, arrowIndex + 2) === '=>') {
+        output += identifier;
+        output += expression.slice(endIndex, arrowIndex + 2);
+        establishArrowScope([identifier], expression, arrowIndex + 2, scopes, pendingScopes, {
+          parenDepth,
+          bracketDepth,
+          braceDepth
+        });
+        index = arrowIndex + 2;
+        continue;
+      }
+
+      if (shouldPreserveIdentifier(expression, identifier, index, endIndex, scopes)) {
         output += identifier;
       } else if (FRAMEWORK_SCOPE_GLOBALS.has(identifier)) {
         const helper = FRAMEWORK_SCOPE_GLOBALS.get(identifier);
@@ -573,6 +1253,8 @@ export function transformDatastarExpression(expression, options = {}) {
         const next = nextSignificantCharacter(expression, endIndex);
         if (helper.nativeAction && next === '(' && !options.disableNativeTransportActions) {
           output += helper.nativeAction;
+        } else if (identifier === 'mutate' && options.eventContext) {
+          output += 'mutate';
         } else {
           output += helper.runtimeTarget;
         }
@@ -586,6 +1268,10 @@ export function transformDatastarExpression(expression, options = {}) {
 
     output += char;
     index += 1;
+  }
+
+  while (scopes.length > 1 && scopes[scopes.length - 1].concise) {
+    scopes.pop();
   }
 
   return output;

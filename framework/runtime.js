@@ -3499,7 +3499,7 @@ function scheduleRoutePreloads(contract) {
 
 function exposeRuntime(config, host) {
   const cache = createCacheApi();
-  window.BracketsRuntime = {
+  const runtime = {
     config,
     host,
     auth: createAuthApi(),
@@ -3576,6 +3576,8 @@ function exposeRuntime(config, host) {
       return handleNavigation(buildHref(target, contract), options);
     }
   };
+  window.BracketsRuntime = runtime;
+  window.mutate = (...args) => runtime.mutate(...args);
 }
 
 let devSseCoalesceTimer = null;
@@ -3642,6 +3644,38 @@ function attachDevReloadStream(host) {
   });
 }
 
+function hasTrustworthyServiceWorkerOrigin() {
+  if (!window.location) {
+    return false;
+  }
+  if (window.isSecureContext) {
+    return true;
+  }
+  return ['localhost', '127.0.0.1'].includes(String(window.location.hostname ?? '').trim());
+}
+
+async function registerOptionalServiceWorker() {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return;
+  }
+  if (!hasTrustworthyServiceWorkerOrigin()) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/service-worker.js', {
+      method: 'GET',
+      cache: 'no-store'
+    });
+    if (!response.ok) {
+      return;
+    }
+    await navigator.serviceWorker.register('/service-worker.js');
+  } catch {
+    // Service workers are optional; keep bootstrap resilient when registration is unavailable.
+  }
+}
+
 async function bootstrap() {
   frameworkConfig = readJsonScript('config', {});
   embeddedHost = readJsonScript('host', {});
@@ -3662,6 +3696,7 @@ async function bootstrap() {
   observeFrameworkSignals();
   observeFrameworkDom();
   await applyEntryBehavior(frameworkConfig);
+  void registerOptionalServiceWorker();
   attachDevReloadStream(embeddedHost);
 
   if (currentShell === 'starter') {

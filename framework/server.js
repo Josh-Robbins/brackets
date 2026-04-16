@@ -878,15 +878,21 @@ function normalizeRouteDependencyToken(value, kind = '') {
     body = raw.slice(explicitPrefix.length).trim();
   }
 
+  const kindPrefixPattern = normalizedKind
+    ? new RegExp(`^(?:@${normalizedKind}/|${normalizedKind}/)`, 'i')
+    : null;
   const cleaned = body
+    .replace(/^@(data|api)\//i, '')
     .replace(/^@app\/(?:data|api)\//i, '')
+    .replace(/^\/?(?:data|api)\//i, '')
     .replace(/^\/?app\/(?:data|api)\//i, '')
     .replace(/^\.\/+/, '')
     .replace(/\.(?:data|api)$/i, '')
     .trim()
     .replace(/\\/g, '/')
     .replace(/^\/+/, '')
-    .replace(/\/+$/, '');
+    .replace(/\/+$/, '')
+    .replace(kindPrefixPattern ?? /$^/, '');
 
   if (!cleaned) {
     return null;
@@ -2862,6 +2868,15 @@ function resolveRobotsTxtPath(packageRoot, entryRoot) {
   return packageRobots;
 }
 
+function resolveServiceWorkerPath(packageRoot, entryRoot) {
+  const entryServiceWorker = path.join(entryRoot.absolutePath, 'service-worker.js');
+  const packageServiceWorker = path.join(packageRoot, 'service-worker.js');
+  if (existsSync(entryServiceWorker)) {
+    return entryServiceWorker;
+  }
+  return existsSync(packageServiceWorker) ? packageServiceWorker : null;
+}
+
 export async function createServer({
   appRoot = PACKAGE_ROOT,
   port,
@@ -2886,6 +2901,7 @@ export async function createServer({
     || (config.watch?.enabled === true && config.watch?.reload === true);
   const entryRoot = resolveEntryFolder(packageRoot, config);
   const robotsPath = resolveRobotsTxtPath(packageRoot, entryRoot);
+  const serviceWorkerPath = resolveServiceWorkerPath(packageRoot, entryRoot);
 
   if (!existsSync(entryRoot.indexPath)) {
     throw new Error(`Missing Brackets entry file at ${entryRoot.indexPath}`);
@@ -3592,6 +3608,10 @@ export async function createServer({
       }
 
       if (url.pathname === '/service-worker.js') {
+        if (serviceWorkerPath && existsSync(serviceWorkerPath)) {
+          respond.send(200, MIME_TYPES.get('.js') ?? 'text/javascript; charset=utf-8', await readStaticBody(serviceWorkerPath), buildStaticAssetCacheHeaders(config, '.js'));
+          return;
+        }
         respond.send(404, 'text/plain; charset=utf-8', 'Not found');
         return;
       }

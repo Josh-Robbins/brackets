@@ -2,6 +2,9 @@ node_modules/
 dist/
 static-out/
 release/
+!release/
+release/*
+!release/SHA256SUMS
 .tmp-package/
 .DS_Store
 Thumbs.db
