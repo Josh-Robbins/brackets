@@ -4,6 +4,8 @@ This document turns the reference into a practical path forward for the codebase
 
 The compact canonical summary lives in [reference.md](./reference.md) and should be treated as the fast-scanning contract. This checklist exists to turn that contract into implementation work.
 
+For the **release gate**, **CI checksum behavior**, and **verification-first** workflow, see [production-readiness.md](./production-readiness.md). For **Tauri / WebView2 / native host** expectations (non-blocking for web v1), see [adapter-contract.md](./adapter-contract.md).
+
 It is intentionally biased toward the project goals:
 
 - no build step
@@ -822,10 +824,11 @@ The next concrete work in this repo should be:
 
 Before tagging a release:
 
-- Run `deno test tests/test.js --allow-all` locally (same as CI). Confirm **0 failed** in the summary (ignore stale pass counts from older write-ups). The suite includes the **demo `data`/`demo` append + `events` readback** RPC checks and **`/robots.txt`** validation when using the repo’s default layout.
+- Run `deno test tests/test.js --allow-all` locally (same as CI). Confirm **0 failed** in the summary (ignore stale pass counts from older write-ups). The suite includes the **demo `data`/`demo` append + `events` readback** RPC checks, a **CSP nonce shell + RPC** check when nonce mode is enabled in tests, and **`/robots.txt`** validation when using the repo’s default layout. No npm or Playwright is required.
 - Load the configured entry (for example `framework/demo`) at `/` and confirm a single routed mount tree (no duplicated layout shells or duplicate element `id`s).
 - Confirm route metadata: after navigation, `document.title` and `meta[name="description"]` match the active route where provided in the `.view` manifest.
 - **Manual QA (demo live data):** on the demo home page, open the “Live data” hero panel, exercise save/update flows for the sample note field, and confirm storage-backed behavior with no console errors. Do not rely on ad-hoc `callRpc` from the DevTools console without a loaded CSRF token (see `docs/reference.md`). Automated tests cover the RPC append/read path and storage primitives; manual QA confirms the full in-browser UX.
+- Confirm `/service-worker.js` serves when the optional worker file is present and that the runtime keeps registration limited to trustworthy origins.
 - Optional: run Lighthouse (or another a11y/SEO auditor) locally on the demo URL for SEO and accessibility; automated tests already assert **`/robots.txt`** status, `text/plain`, and body shape. Optional later: run Lighthouse in CI with fixed budgets—adds Chromium download time and flake risk, so it is not part of the default workflow yet.
 
 ## Done Means

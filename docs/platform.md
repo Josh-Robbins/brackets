@@ -135,6 +135,43 @@ Current public host endpoints:
 - `/.well-known/brackets-host.json`
 - `/.well-known/brackets-app.json`
 
+### 5A. Production-Supported Surface
+
+Current v1 production surface:
+
+- built-in same-origin Brackets host
+- ordinary HTTPS web deployment of the same portable folder
+
+Current adapter-contract surface:
+
+- Tauri
+- WebView2
+
+Those adapter targets are part of the public contract, but they are not a shipped parity matrix today. They should implement the same route/render/module/host contracts rather than introducing a second Brackets dialect.
+
+### 5B. Host-Native Capability Boundary
+
+Host-native capabilities should stay outside normal `.logic` and `.html` authoring.
+
+Current rule:
+
+- `.data` may expose local authority and host-backed persistence
+- `.api` remains the remote/shared-authority path
+- host-specific native bridges must be explicit, permissioned, and adapter-owned
+
+That keeps the core app model portable across the built-in host, web deployment, Tauri, and WebView2-style shells.
+
+### 5C. Asset And Module Resolution Rules
+
+Current resolution contract:
+
+- `@app/` resolves from the package entry root
+- `@data/` and `@api/` resolve from `app/data/` and `app/api/`
+- route dependency declarations normalize `@data/...`, `@api/...`, `@app/data/...`, `@app/api/...`, bare ids, and app-relative module paths to the same canonical module id
+- `/.well-known/brackets-app.json` is the source of truth for resolved routes, layouts, and declared module dependencies
+
+The point is to keep route/module identity stable no matter which supported host serves the folder.
+
 ## 6. Distribution Contract
 
 Brackets should ship as a portable folder model.
@@ -201,6 +238,34 @@ Current no-build offline/PWA contract:
 - optional root `/service-worker.js`
 - automatic service worker registration on trustworthy origins when available
 
+A commented template lives at [`framework/example/service-worker.js`](../framework/example/service-worker.js); copy it to your entry root when you want offline support. The runtime only attempts registration on trustworthy origins so the worker stays additive rather than mandatory.
+
+## 11A. Worker Strategy
+
+Current worker strategy:
+
+- Web Workers are optional and non-core
+- Service Workers are optional and offline-focused
+- native background work is adapter-specific
+
+Brackets should not move routing, template composition, or Datastar-driven reactivity into workers.
+
+## 11B. Observability Contract
+
+Current production-readiness diagnostics:
+
+- framework request ids on RPC/session/render failures
+- structured denial logging for RPC/live access checks
+- `health`, `status server`, and `/.well-known/*` host/app contracts for runtime inspection
+
+The next layer to deepen is richer tracing and metrics, but the shipped baseline should already make request failures diagnosable.
+
+## 11C. OpenAPI Helper Status
+
+The `.api` helper contract keeps the `http.client(...)`, `http.resource(...)`, and `http.openapi(...)` shape in the docs, but the OpenAPI-aligned operation path is still a documented extension target rather than a completed v1 runtime feature.
+
+That deferral is intentional: Brackets should stay production-ready on the built-in/web-host path without pretending the OpenAPI layer is already finished.
+
 ## 12. Remaining Deepening Targets
 
 The next layers to deepen after the current pass are:
@@ -212,3 +277,5 @@ The next layers to deepen after the current pass are:
 For containerized local and production deployment patterns, read:
 
 - [docker.md](./docker.md)
+
+For the **release gate**, checksum CI behavior, and verification order, see [production-readiness.md](./production-readiness.md). For **native WebView shells** (Tauri, WebView2), see [adapter-contract.md](./adapter-contract.md).

@@ -936,6 +936,14 @@ Implication for Brackets:
 - use a restricted evaluator for data access, safe operators, object/array literals, and approved helper calls
 - prefer compiling to Datastar-native expressions everywhere else
 
+## Deferred contract work (post-v1)
+
+The following items are **intentionally not** required for calling the **built-in same-origin host** or a normal **HTTPS** deployment “production-ready.” Track them as product roadmap, not release blockers, unless you explicitly scope a milestone to them:
+
+- **Native shells:** full parity and CI for Tauri, WebView2, and similar (see [adapter-contract.md](./adapter-contract.md)).
+- **OpenAPI-aligned `.api` surface:** helpers for path/query/header/body serialization described in the checklist; implement when there is a concrete authoring need.
+- **Deeper observability:** beyond current structured access logs and `requestId` in errors—documented in [production-readiness.md](./production-readiness.md).
+
 ## Historical Note
 
 `Starting consept.md` contains a larger earlier exploration of `[]`-driven directive syntax such as:

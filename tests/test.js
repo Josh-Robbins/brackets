@@ -1,4 +1,4 @@
-// Uses Deno + @std/path only (no node: imports). Interacts with: ../framework/server.js, ../framework/syntax.js
+// Uses Deno + @std/path only (no node: imports). Interacts with: ../framework/server.js, ../framework/syntax.js, ../framework/runtime.js (static sanitizer contract)
 import { dirname, join, resolve } from 'jsr:@std/path@1';
 import { createServer } from '../framework/server.js';
 import { transformHtmlSyntax } from '../framework/syntax.js';
@@ -519,6 +519,11 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       '  }',
       '})'
     ].join('\n'));
+    await writeText(join(tempRoot, 'service-worker.js'), [
+      "self.addEventListener('install', () => {",
+      '  self.skipWaiting();',
+      '});'
+    ].join('\n'));
 
     await withServer(tempRoot, async ({ url }) => {
       const appResponse = await fetch(`${url}/.well-known/brackets-app.json`);
@@ -613,6 +618,14 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assert(runtimeSource.includes('root: locals'), 'scope bridge should expose the documented root helper');
       assert(runtimeSource.includes('props: {}'), 'scope bridge should expose the documented props helper');
       assert(runtimeSource.includes('event: null'), 'scope bridge should expose the documented event helper');
+      assert(runtimeSource.includes("navigator.serviceWorker.register('/service-worker.js')"), 'runtime should auto-register the optional service worker when it is present on a trustworthy origin');
+      assert(runtimeSource.includes('window.mutate = (...args) => runtime.mutate(...args);'), 'runtime should expose mutate() as a browser helper for complex event expressions');
+
+      const serviceWorkerResponse = await fetch(`${url}/service-worker.js`);
+      const serviceWorkerSource = await serviceWorkerResponse.text();
+      assertEqual(serviceWorkerResponse.status, 200, 'entry service-worker.js should be served when present');
+      assertEqual(serviceWorkerResponse.headers.get('content-type'), 'text/javascript; charset=utf-8', 'service-worker should be served as JavaScript');
+      assert(serviceWorkerSource.includes("self.addEventListener('install'"), 'service-worker endpoint should serve the authored worker source');
 
       const sessionSecurity = await getSessionSecurity(url);
       const sessionPayload = sessionSecurity.payload;
@@ -728,6 +741,41 @@ Deno.test('framework discovers routes and wires html, .data, and .api through th
       assertEqual(csrfFailureResponse.status, 403, 'RPC should reject requests with a bad CSRF token');
       assertEqual(csrfFailurePayload.code, 'BRACKETS_CSRF_MISMATCH', 'RPC CSRF failures should return a stable framework error code');
       assert(typeof csrfFailurePayload.requestId === 'string' && csrfFailurePayload.requestId.length > 0, 'RPC CSRF failures should include a request id');
+
+      const originFailureResponse = await fetch(`${url}/__brackets/rpc`, {
+        method: 'POST',
+        headers: {
+          ...csrfHeaders,
+          Origin: 'https://evil.example'
+        },
+        body: JSON.stringify({
+          kind: 'data',
+          module: 'contacts',
+          method: 'list',
+          args: [],
+          route: {
+            path: '/home',
+            query: {},
+            hash: ''
+          }
+        })
+      });
+      const originFailurePayload = await originFailureResponse.json();
+      assertEqual(originFailureResponse.status, 403, 'RPC should reject cross-origin browser-style requests');
+      assertEqual(originFailurePayload.code, 'BRACKETS_ORIGIN_MISMATCH', 'cross-origin failures should return a stable framework error code');
+
+      const invalidJsonResponse = await fetch(`${url}/__brackets/rpc`, {
+        method: 'POST',
+        headers: {
+          ...csrfHeaders,
+          'Content-Type': 'application/json'
+        },
+        body: '{"kind": "data"'
+      });
+      const invalidJsonPayload = await invalidJsonResponse.json();
+      assertEqual(invalidJsonResponse.status, 400, 'RPC should reject malformed JSON bodies');
+      assertEqual(invalidJsonPayload.code, 'BRACKETS_REQUEST_ERROR', 'malformed JSON failures should return a stable framework error code');
+      assert(invalidJsonPayload.error.includes('Expected valid JSON body'), 'malformed JSON failures should explain the JSON parsing requirement');
 
       const largePayload = JSON.stringify({
         kind: 'data',
@@ -1456,6 +1504,54 @@ Deno.test('package demo: data demo append persists and events readback; host sta
   });
 });
 
+Deno.test('package demo: CSP nonce inline scripts and demo RPC succeed', async () => {
+  const instance = await createServer({
+    appRoot: repoRoot,
+    host: '127.0.0.1',
+    port: 0,
+    securityHeaders: { cspNonceInlineScripts: true }
+  });
+  try {
+    const { url } = instance;
+    const home = await fetch(url);
+    assertEqual(home.status, 200, 'demo home should load with CSP nonce mode enabled');
+    const csp = home.headers.get('content-security-policy') ?? '';
+    assert(
+      /script-src[^;]*nonce-[a-zA-Z0-9+/=_-]+/.test(csp),
+      `CSP should include script-src with nonce (got: ${csp.slice(0, 160)})`
+    );
+    const homeHtml = await home.text();
+    assert(homeHtml.length > 0, 'demo home should return HTML body');
+
+    const sessionSecurity = await getSessionSecurity(url);
+    assertEqual(sessionSecurity.status, 200, 'session should be available for demo RPC');
+    const csrfHeaders = sessionSecurity.headers;
+    const routePayload = { path: '/', query: {}, hash: '' };
+    const noteText = `csp-nonce-demo-${Date.now()}`;
+    const appendResponse = await fetch(`${url}/__brackets/rpc`, {
+      method: 'POST',
+      headers: {
+        ...csrfHeaders,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        kind: 'data',
+        module: 'demo',
+        method: 'append',
+        args: [{ text: noteText }],
+        route: routePayload
+      })
+    });
+    const appendJson = await appendResponse.json();
+    assertEqual(appendResponse.status, 200, 'demo append RPC should return 200 under CSP nonce host');
+    assertEqual(appendJson.ok, true, 'demo append payload should be ok');
+    assert(appendJson.result?.row?.id, 'append should return a row id');
+  } finally {
+    await instance.close();
+  }
+});
+
 Deno.test('GET /robots.txt is valid plain text without BOM', async () => {
   await withServer(repoRoot, async ({ url }) => {
     const res = await fetch(`${url}/robots.txt`);
@@ -1469,4 +1565,39 @@ Deno.test('GET /robots.txt is valid plain text without BOM', async () => {
     assert(text.includes('User-agent:'), 'robots should include User-agent');
     assert(text.includes('Allow:'), 'robots should include Allow');
   });
+});
+
+Deno.test('framework security: RPC rejects missing CSRF header when session cookie is present', async () => {
+  await withServer(repoRoot, async ({ url }) => {
+    const sessionSecurity = await getSessionSecurity(url);
+    const cookie = sessionSecurity.headers.Cookie;
+    assert(typeof cookie === 'string' && cookie.length > 0, 'session should set a cookie');
+    const res = await fetch(`${url}/__brackets/rpc`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Cookie: cookie
+      },
+      body: JSON.stringify({
+        kind: 'data',
+        module: 'demo',
+        method: 'events',
+        args: [],
+        route: { path: '/', query: {}, hash: '' }
+      })
+    });
+    const payload = await res.json();
+    assertEqual(res.status, 403, 'RPC should reject POST without x-brackets-csrf');
+    assertEqual(payload.code, 'BRACKETS_CSRF_MISMATCH', 'missing CSRF should use CSRF mismatch code');
+  });
+});
+
+Deno.test('framework security: runtime :html sanitizer blocks script-like markup (static contract)', async () => {
+  const runtimePath = join(repoRoot, 'framework', 'runtime.js');
+  const runtimeSource = await Deno.readTextFile(runtimePath);
+  assert(runtimeSource.includes('function sanitizeFrameworkHtml'), 'runtime should define sanitizeFrameworkHtml for :html');
+  assert(runtimeSource.includes("'SCRIPT'"), 'sanitizer should block SCRIPT elements');
+  assert(runtimeSource.includes("name.startsWith('on')"), 'sanitizer should strip event-handler attributes');
+  assert(runtimeSource.includes('blockedTags'), 'sanitizer should use a blocked tag list');
 });

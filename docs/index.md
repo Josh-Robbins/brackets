@@ -47,7 +47,7 @@ See **[docker.md](./docker.md)**.
 
 ### Production setup
 
-See **[platform.md](./platform.md)**, **[release.md](./release.md)**, and **[docker.md#production-docker-shape](./docker.md#production-docker-shape)**.
+See **[platform.md](./platform.md)**, **[release.md](./release.md)**, **[production-readiness.md](./production-readiness.md)** (release gate and CI nuance), **[adapter-contract.md](./adapter-contract.md)** (native host expectations), and **[docker.md#production-docker-shape](./docker.md#production-docker-shape)**.
 
 ## Start Here
 

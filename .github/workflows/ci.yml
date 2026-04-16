@@ -1,4 +1,4 @@
-# Interacts with: tests/test.js, tests/browser_demo_test.js, Deno + Playwright (browser gate)
+# Interacts with: tests/test.js, Deno (no Node/npm browser deps)
 name: CI
 
 on:
@@ -14,23 +14,30 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Run framework tests (demo RPC + robots + contracts)
+      - name: Run framework tests (demo RPC + robots + contracts + CSP nonce)
         run: deno test tests/test.js --allow-all
 
-  browser-smoke:
+  contracts-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Playwright Chromium (matches npm:playwright@1.49.1)
-        run: npx playwright@1.49.1 install chromium --with-deps
-      - name: Browser smoke (demo Live tab + RPC + console)
-        run: deno test tests/browser_demo_test.js --allow-all
+      - name: Host and app contract smoke
+        run: |
+          deno eval --allow-all <<'DENO'
+          import { createServer } from './framework/server.js';
+          const instance = await createServer({ appRoot: Deno.cwd(), host: '127.0.0.1', port: 0 });
+          try {
+            const host = await fetch(`${instance.url}/.well-known/brackets-host.json`).then((response) => response.json());
+            const app = await fetch(`${instance.url}/.well-known/brackets-app.json`).then((response) => response.json());
+            if (!host?.distribution?.entryPoint) throw new Error('Missing host distribution entryPoint');
+            if (!Array.isArray(app?.routes)) throw new Error('Missing app routes contract');
+          } finally {
+            await instance.close();
+          }
+          DENO
 
   release-artifacts:
     if: hashFiles('release/**') != ''
@@ -41,6 +48,7 @@ jobs:
         run: find release -type f 2>/dev/null | head -200
       - name: SHA256 checksums
         run: (cd release && find . -type f -print0 | sort -z | xargs -0 sha256sum) > /tmp/release-sha256.txt && cat /tmp/release-sha256.txt
-      - name: Verify release/SHA256SUMS when committed
+      - name: Verify release/SHA256SUMS
         run: |
-          if [ -f release/SHA256SUMS ]; then (cd release && sha256sum -c SHA256SUMS); else echo "No release/SHA256SUMS manifest; skip verify (add one to gate drift)."; fi
+          test -f release/SHA256SUMS
+          (cd release && sha256sum -c SHA256SUMS)

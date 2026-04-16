@@ -144,8 +144,8 @@ The repo ships a **copy-paste** multi-file example under [`framework/example/`](
 
 | Location | Role |
 |----------|------|
-| [`framework/demo/`](../framework/demo/) | **Packaged starter** the built-in host can serve: entry `index.html`, splash/health UI, and `app/` assets (styles, icons, sample storage). It does not ship a full `.view`-driven tutorial route in `app/`—see the example row for that. |
-| [`framework/example/`](../framework/example/) | **Templates** showing one full route: `.view` + layout + page + component + `.logic` + `.data` wired together. |
+| [`framework/demo/`](../framework/demo/) | **Packaged starter** the built-in host can serve: entry `index.html`, splash/health UI, and `app/` assets (styles, icons, sample storage). No `service-worker.js` here by default—copy from `framework/example/` if you want offline. It does not ship a full `.view`-driven tutorial route in `app/`—see the example row for that. |
+| [`framework/example/`](../framework/example/) | **Templates** showing one full route: `.view` + layout + page + component + `.logic` + `.data` wired together, plus an optional commented [`service-worker.js`](../framework/example/service-worker.js). |
 
 Use the demo to see the embedded host and starter shell; use the example folder when you want a **known-good file set** to copy into `app/` for a complete routed page.
 
@@ -166,9 +166,10 @@ Adding the example route means **new files under `app/`** and a `.view` that reg
 1. Copy [`example.view`](../framework/example/example.view) into `app/` (keep the name or rename; keep the `.view` extension).
 2. Copy [`page.html`](../framework/example/page.html), [`layout.html`](../framework/example/layout.html), [`component.html`](../framework/example/component.html), and [`example.logic`](../framework/example/example.logic) into `app/` so paths match the manifest (the sample uses a **flat** `app/` layout and `@app/...` in the `.view`).
 3. Copy [`example.data`](../framework/example/example.data) to **`app/data/example.data`** — the module id is the basename without `.data` (`example`), matching `data: { example: '@data/example.data' }` in the `.view`.
-4. Ensure `app/storage/` exists if you use the sample JSON path; the example persists a note via `storage.json('@storage/example-note.json')` under `app/storage/`.
-5. Register the route in your app’s view list / router the same way other pages are registered (the sample route is `/example`).
-6. Run the app with the packaged CLI (`run app`, `run app dev`) — see [`framework/agents.md`](../framework/agents.md).
+4. Optional: copy [`service-worker.js`](../framework/example/service-worker.js) to your **entry root** as `service-worker.js` if you want the optional offline path (edit `CACHE_NAME` and `OFFLINE_ASSETS` inside the file; see comments there).
+5. Ensure `app/storage/` exists if you use the sample JSON path; the example persists a note via `storage.json('@storage/example-note.json')` under `app/storage/`.
+6. Register the route in your app’s view list / router the same way other pages are registered (the sample route is `/example`).
+7. Run the app with the packaged CLI (`run app`, `run app dev`) — see [`framework/agents.md`](../framework/agents.md).
 
 If you use nested folders (`app/pages/`, `app/views/`, …), update every path in the `.view` file to match (import-map aliases like `@pages/` are supported by the host).
 
@@ -182,6 +183,7 @@ If you use nested folders (`app/pages/`, `app/views/`, …), update every path i
 | `component.html` | Fragment loaded by `:use` from the page. |
 | `example.logic` | Lifecycle and actions (`mount`, `toggleOpen`, `saveNote`). |
 | `example.data` | Local model: `read` / `save` with `storage.json` under `@storage/`. |
+| `service-worker.js` | Optional offline precache; copy to **entry root** only if you want PWA-style caching (see file header). |
 
 ### Optional layout after copy (flat `app/`)
 
@@ -909,7 +911,7 @@ Current no-build path:
 - optional `/service-worker.js` at the app root, auto-registered when available on a trustworthy origin
 - optional service-worker-backed offline support
 
-The demo app includes a copyable no-build `service-worker.js` example.
+A **copy-paste** no-build `service-worker.js` template lives with the other templates at [`framework/example/service-worker.js`](../framework/example/service-worker.js). Copy it to your **entry root** (next to that entry’s `index.html`) as `service-worker.js` if you want offline precache; the file is heavily commented. The runnable [`framework/demo/`](../framework/demo/) entry does **not** ship a worker by default so the demo stays minimal.
 
 If a host adapter or deployment adds a service worker, Brackets should use it as an add-on, not as a core framework requirement.
 
@@ -988,7 +990,9 @@ Use the working root CLI and host contract:
 - `info` to confirm the package root, engine path, and entry file
 - `status server` to confirm the active origin
 - `health` to probe the running host
-- `run app test` to run the bundled Deno framework checks
+- `run app test` to run the bundled Deno framework checks (same coverage as CI; no Node/npm or Playwright required)
+
+For interactive UI checks, load the demo in a normal browser after `run app`; automated tests stay Deno-only and hit the host over HTTP.
 
 ## What An App Should Not Do
 

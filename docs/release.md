@@ -34,6 +34,7 @@ Brackets/
     agents.md
     demo/
       index.html
+      service-worker.js
       app/
         styles.css
         logo.svg
@@ -75,7 +76,7 @@ The important thing is that the default Brackets experience stays download-first
 
 ## CI and packaged `release/`
 
-When this repository contains a `release/` tree, GitHub Actions lists files, prints **SHA256** checksums, and, if **`release/SHA256SUMS`** is committed, verifies it with `sha256sum -c` so packaged artifacts cannot drift silently. Without that manifest, the job is informational only; source remains authoritative and **`deno test`** plus browser smoke are the primary gates.
+When this repository contains a `release/` tree, GitHub Actions should treat **`release/SHA256SUMS`** as required and verify it with `sha256sum -c` so packaged artifacts cannot drift silently. Source remains authoritative, but packaged release integrity is part of the gate now, alongside **`deno test`**, the contracts smoke job, and the well-known host/app contract checks.
 
 ## Supported Runtime Modes
 
@@ -132,7 +133,8 @@ The intended dev experience is:
 2. Edit `.view`, `.html`, `.logic`, `.api`, `.data`, and storage files directly.
 3. Run the optional local host only when same-origin serving or local file-backed behavior is needed.
 4. Run `status server`, `health`, and `run app test` as the built-in verification path.
-5. Assemble the portable folder directly when desired.
+5. Run `deno test tests/test.js --allow-all` (or `run app test`) for the full host-level demo gate—no npm or Playwright.
+6. Assemble the portable folder directly when desired.
 
 The important part is that Brackets remains usable as files first.
 

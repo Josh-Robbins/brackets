@@ -234,7 +234,9 @@ External mode stays honest too:
 
 The built-in verification path is `run app test` from the root CLI.
 
-The package test file is [`tests/test.js`](./tests/test.js). The CLI [`cli.js`](./cli.js) invokes **only** that file for `run app test` / `test app`—no extra test entry points and **no `npm:`** specifiers in the default suite. The tests use **Deno APIs and `jsr:@std/path`** only (no `node:*` imports), so you are not depending on Node.js to run tests (the built-in host still uses Deno’s Node-compat layer internally for `framework/server.js`).
+The package test file is [`tests/test.js`](./tests/test.js). The CLI [`cli.js`](./cli.js) invokes **only** that file for `run app test` / `test app`—no extra test entry points and **no `npm:`** specifiers. The tests use **Deno APIs and `jsr:@std/path`** only (no `node:*` imports), so you are not depending on Node.js or npm to run tests (the built-in host still uses Deno’s Node-compat layer internally for `framework/server.js`). The suite exercises the packaged demo over HTTP (including demo `data` RPC, optional CSP nonce shell headers, contracts, `/robots.txt`, and security regressions). See [docs/production-readiness.md](./docs/production-readiness.md) for how this maps to CI and releases. Full in-browser UX remains a quick manual pass when you change UI.
+
+A copyable no-build service worker template lives at [`framework/example/service-worker.js`](./framework/example/service-worker.js) (with setup comments). Copy it to your **entry root** as `service-worker.js` when you want that path; the runtime auto-registers `/service-worker.js` on trustworthy origins when the file is present.
 
 ## Distribution
 
